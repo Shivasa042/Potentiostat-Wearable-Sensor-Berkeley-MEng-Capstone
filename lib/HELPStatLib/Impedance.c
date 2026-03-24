@@ -427,130 +427,93 @@ AD5940Err AppIMPCheckFreq(float freq)
   
        if(freq < 1.5)
 	{
-            /* Update HSDAC update rate */
-    // hsdac_cfg.ExcitBufGain =EXCITBUFGAIN_2;// AppIMPCfg.ExcitBufGain;
-    // hsdac_cfg.HsDacGain = HSDACGAIN_1;//AppIMPCfg.HsDacGain;
     hsdac_cfg.ExcitBufGain = AppIMPCfg.ExcitBufGain;
     hsdac_cfg.HsDacGain = AppIMPCfg.HsDacGain;
      hsdac_cfg.HsDacUpdateRate = 0x1B;
     AD5940_HSDacCfgS(&hsdac_cfg);
     AD5940_HSRTIACfgS(HSTIARTIA_20K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_10K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_5K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_200);
 	__AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
     
-    /*Update ADC rate */
     filter_cfg.ADCRate = ADCRATE_800KHZ;
     AppIMPCfg.AdcClkFreq = 16e6;
     
-    /* Change clock to 16MHz oscillator */
     AD5940_HPModeEn(bFALSE);
+    AD5940_WriteReg(REG_AFE_ADCBUFCON, 0x005F3D04);
 	}
         else if(freq < 20 )
 	{
-       /* Update HSDAC update rate */
-    // hsdac_cfg.ExcitBufGain =EXCITBUFGAIN_2;// AppIMPCfg.ExcitBufGain;
-    // hsdac_cfg.HsDacGain = HSDACGAIN_1;//AppIMPCfg.HsDacGain;
     hsdac_cfg.ExcitBufGain = AppIMPCfg.ExcitBufGain;
     hsdac_cfg.HsDacGain = AppIMPCfg.HsDacGain;
     hsdac_cfg.HsDacUpdateRate = 0x1B;
     AD5940_HSDacCfgS(&hsdac_cfg);
-    // AD5940_HSRTIACfgS(HSTIARTIA_40K);
     AD5940_HSRTIACfgS(HSTIARTIA_10K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_200);
 	__AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
     
-    /*Update ADC rate */
     filter_cfg.ADCRate = ADCRATE_800KHZ;
     AppIMPCfg.AdcClkFreq = 16e6;
     
-    /* Change clock to 16MHz oscillator */
     AD5940_HPModeEn(bFALSE);
-    
+    AD5940_WriteReg(REG_AFE_ADCBUFCON, 0x005F3D04);
 	}
   else if(freq < 60)
 	{
-       /* Update HSDAC update rate */
     hsdac_cfg.ExcitBufGain =AppIMPCfg.ExcitBufGain;
     hsdac_cfg.HsDacGain = AppIMPCfg.HsDacGain;  
-    
     hsdac_cfg.HsDacUpdateRate = 0x1B;
     AD5940_HSDacCfgS(&hsdac_cfg);
-    // AD5940_HSRTIACfgS(HSTIARTIA_40K);
     AD5940_HSRTIACfgS(HSTIARTIA_5K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_1K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_200);
   __AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
     
-    /*Update ADC rate */
     filter_cfg.ADCRate = ADCRATE_800KHZ;
     AppIMPCfg.AdcClkFreq = 16e6;
     
-    /* Change clock to 16MHz oscillator */
     AD5940_HPModeEn(bFALSE);
+    AD5940_WriteReg(REG_AFE_ADCBUFCON, 0x005F3D04);
 	}
   else if(freq < 400)
 	{
-       /* Update HSDAC update rate */
     hsdac_cfg.ExcitBufGain =AppIMPCfg.ExcitBufGain;
     hsdac_cfg.HsDacGain = AppIMPCfg.HsDacGain;  
-    
     hsdac_cfg.HsDacUpdateRate = 0x1B;
     AD5940_HSDacCfgS(&hsdac_cfg);
-    // AD5940_HSRTIACfgS(HSTIARTIA_40K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_5K);
     AD5940_HSRTIACfgS(HSTIARTIA_1K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_200);
   __AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
     
-    /*Update ADC rate */
     filter_cfg.ADCRate = ADCRATE_800KHZ;
     AppIMPCfg.AdcClkFreq = 16e6;
     
-    /* Change clock to 16MHz oscillator */
     AD5940_HPModeEn(bFALSE);
+    AD5940_WriteReg(REG_AFE_ADCBUFCON, 0x005F3D04);
 	}
        else if(freq<80000)
        {
-           /* Update HSDAC update rate */
     hsdac_cfg.ExcitBufGain =AppIMPCfg.ExcitBufGain;
     hsdac_cfg.HsDacGain = AppIMPCfg.HsDacGain;
     hsdac_cfg.HsDacUpdateRate = 0x1B;
     AD5940_HSDacCfgS(&hsdac_cfg);
-    // AD5940_HSRTIACfgS(HSTIARTIA_5K);
     AD5940_HSRTIACfgS(HSTIARTIA_200);
-    // AD5940_HSRTIACfgS(HSTIARTIA_1K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_40K);
 	__AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
     
-    /*Update ADC rate */
     filter_cfg.ADCRate = ADCRATE_800KHZ;
     AppIMPCfg.AdcClkFreq = 16e6;
     
-    /* Change clock to 16MHz oscillator */
     AD5940_HPModeEn(bFALSE);
+    AD5940_WriteReg(REG_AFE_ADCBUFCON, 0x005F3D04);
        }
-        /* High power mode */
 	if(freq >= 80000)
 	{
-		  /* Update HSDAC update rate */
     hsdac_cfg.ExcitBufGain =AppIMPCfg.ExcitBufGain;
     hsdac_cfg.HsDacGain = AppIMPCfg.HsDacGain;
     hsdac_cfg.HsDacUpdateRate = 0x07;
     AD5940_HSDacCfgS(&hsdac_cfg);
-    // AD5940_HSRTIACfgS(HSTIARTIA_5K);
     AD5940_HSRTIACfgS(HSTIARTIA_200);
-    // AD5940_HSRTIACfgS(HSTIARTIA_1K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_40K);
 	__AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
     
-    /*Update ADC rate */
     filter_cfg.ADCRate = ADCRATE_1P6MHZ;
     AppIMPCfg.AdcClkFreq = 32e6;
     
-    /* Change clock to 32MHz oscillator */
     AD5940_HPModeEn(bTRUE);
+    AD5940_WriteReg(REG_AFE_ADCBUFCON, REG_AFE_ADCBUFCON_RESET);
 	}
   
   /* Step 2: Adjust ADCFILTERCON and DFTCON to set optimumn SINC3, SINC2 and DFTNUM settings  */

@@ -266,7 +266,7 @@ class HELPStat {
         uint32_t _waitClcks; // clock cycles to wait for
         SoftSweepCfg_Type _sweepCfg;
         float _currentFreq; 
-        float _startFreq = 100000; // Initialize w/ default values 
+        float _startFreq = 200000; // 200 kHz (paper range: 1 Hz – 200 kHz)
         float _endFreq   = 1;
         bool _isSD;
 
@@ -407,9 +407,9 @@ class HELPStat {
         void runSweep(uint32_t numCycles, uint32_t delaySecs); // sweep works now and cycles correctly 
         void resetSweep(SoftSweepCfg_Type *pSweepCfg, float *pNextFreq); // works
         
-        /* Both these functions need better optimization but they work for now */
         void settlingDelay(float freq);
         AD5940Err checkFreq(float freq);
+        uint32_t optimalCtia(uint32_t rtia, float freq);
 
         /* SD Card Functions */
         void sdWrite(char *output);

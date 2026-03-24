@@ -63,12 +63,12 @@
 void blinkLED(int cycles, bool state);
 
 calHSTIA test[] = {          
-  {0.51,  HSTIARTIA_40K},       
-  {1.5,         HSTIARTIA_10K},
+  {0.51,    HSTIARTIA_40K},       
+  {1.5,     HSTIARTIA_10K},
   {20,      HSTIARTIA_5K},
-  {150,       HSTIARTIA_5K},
-  {400,         HSTIARTIA_1K},
-  {100000,     HSTIARTIA_200}  
+  {150,     HSTIARTIA_5K},
+  {400,     HSTIARTIA_1K},
+  {200000,  HSTIARTIA_200}  
 };    
  
 /* Variables for function inputs */
@@ -78,8 +78,8 @@ uint32_t numCycles = 0;
 uint32_t delaySecs = 0; 
 uint32_t numPoints = 1; 
 
-float startFreq = 100000; 
-float endFreq = 1000; //1
+float startFreq = 200000; 
+float endFreq = 1;
 float biasVolt = 0.0; 
 float zeroVolt = 0.0; 
 float rcalVal = 1000; // Use the measured resistance of the chosen calibration resistor
@@ -96,7 +96,7 @@ HELPStat demo;
 // SD-card output location for EIS sweeps.
 // saveDataEIS() writes to: /<folderName>/<fileName>.csv
 String folderName = "eis";
-String fileName = "sweep_10Hz_100kHz";
+String fileName = "sweep_1Hz_200kHz";
 
 // Serial command parsing
 String serialInput = "";
@@ -116,7 +116,7 @@ void parseSerialCommand() {
       Serial.println("MEASURE - Start measurement with current/default parameters");
       Serial.println("MEASURE:mode,startFreq,endFreq,numPoints,biasVolt,zeroVolt,rcalVal,extGain,dacGain,rct_est,rs_est,numCycles,delaySecs,amplitude");
       Serial.println("SET:mode,startFreq,endFreq,numPoints,biasVolt,zeroVolt,rcalVal,extGain,dacGain,rct_est,rs_est,numCycles,delaySecs,amplitude");
-      Serial.println("MEASURE:SAMPLE or MEASURE:DEFAULT - run built-in 1Hz-40MHz EIS sweep");
+      Serial.println("MEASURE:SAMPLE or MEASURE:DEFAULT - run built-in 1Hz-200kHz EIS sweep");
       Serial.println("\nMeasurement Modes:");
       Serial.println("  0 = EIS (Electrochemical Impedance Spectroscopy)");
       Serial.println("  1 = CV (Cyclic Voltammetry)");
@@ -141,7 +141,7 @@ void parseSerialCommand() {
       Serial.println("  delaySecs: Delay between cycles (seconds)");
       Serial.println("  amplitude: Signal amplitude (mV, 0-800)");
       Serial.println("\nExamples:");
-      Serial.println("  EIS: MEASURE:0,200000,10,5,0,0,1000,1,1,127000,150,0,0,200");
+      Serial.println("  EIS: MEASURE:0,200000,1,10,0,0,1000,1,1,127000,150,0,0,200");
       Serial.println("  CV:  MEASURE:1,0,0,100,0.0,1.0,1000,1,1,0,0,1,0,50");
       Serial.println("SHOW - Display current settings");
       Serial.println("STATUS - Show measurement status");
@@ -254,8 +254,8 @@ void parseSerialCommand() {
       // configure a standard EIS sweep range with example defaults
       demo.setParameters(
         MODE_EIS,          // EIS mode
-        10.0,              // start frequency 10 Hz
-        100000.0,          // end frequency 100 kHz
+        200000.0,          // start frequency 200 kHz
+        1.0,               // end frequency 1 Hz
         10,                // points per decade
         0.0,               // bias
         0.0,               // zero volt
@@ -269,7 +269,7 @@ void parseSerialCommand() {
         200.0              // amplitude mV
       );
       measurementRequested = true;
-      Serial.println("Default/sample EIS sweep requested (10Hz–100kHz)");
+      Serial.println("Default/sample EIS sweep requested (1Hz-200kHz)");
       return;
     }
     
@@ -420,7 +420,7 @@ void loop() {
     if(digitalRead(BUTTON) == LOW) {
       Serial.println("Button pressed; starting default sample EIS");
       demo.setParameters(
-        MODE_EIS, 10.0, 100000.0, 10, 0.0, 0.0, 1000.0, 1, 1, 127000.0, 150.0, 0, 0, 200.0);
+        MODE_EIS, 200000.0, 1.0, 10, 0.0, 0.0, 1000.0, 1, 1, 127000.0, 150.0, 0, 0, 200.0);
       measurementRequested = true;
     }
   }

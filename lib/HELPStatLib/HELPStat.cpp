@@ -423,20 +423,16 @@ void HELPStat::AD5940_TDD(calHSTIA *gainArr, int gainArrSize) {
     printf("HSTIA bias set to Vzero.\n");
   }
 
-  /* Sets feedback capacitor on HSTIA */
-  HsLoopCfg.HsTiaCfg.HstiaCtia = 31; /* 31pF + 2pF */
-
-  /* No load and RTIA on the D Switch*/
   HsLoopCfg.HsTiaCfg.HstiaDeRload = HSTIADERLOAD_OPEN;
   HsLoopCfg.HsTiaCfg.HstiaDeRtia = HSTIADERTIA_OPEN;
 
-  /* Assuming low frequency measurement */
   HsLoopCfg.HsTiaCfg.HstiaRtiaSel = HSTIARTIA_40K;
+  HsLoopCfg.HsTiaCfg.HstiaCtia = optimalCtia(HSTIARTIA_40K, _startFreq);
 
-  HsLoopCfg.SWMatCfg.Dswitch = SWD_CE0;       // Connects WG to CE0
-  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;       // Connects positive input to RE0
-  HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;       // Connects negative input to SE0
-  HsLoopCfg.SWMatCfg.Tswitch = SWT_SE0LOAD|SWT_TRTIA;   // Connects SEO to HSTIA via SE0Load
+  HsLoopCfg.SWMatCfg.Dswitch = SWD_CE0;
+  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;
+  HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;
+  HsLoopCfg.SWMatCfg.Tswitch = SWT_SE0LOAD|SWT_TRTIA;
 
   _currentFreq = _startFreq;
   HsLoopCfg.WgCfg.WgType = WGTYPE_SIN;
@@ -507,58 +503,50 @@ void HELPStat::AD5940_TDD(calHSTIA *gainArr, int gainArrSize) {
     Serial.println("LPDAC configured successfully.");
   }
 
-  // /* Sets the input of the ADC to the output of the HSTIA */
   dsp_cfg.ADCBaseCfg.ADCMuxN = ADCMUXN_HSTIA_N;
   dsp_cfg.ADCBaseCfg.ADCMuxP = ADCMUXP_HSTIA_P;
 
-  /* Programmable gain array for the ADC */
-  dsp_cfg.ADCBaseCfg.ADCPga = ADCPGA_1;
-  // dsp_cfg.ADCBaseCfg.ADCPga = ADCPGA_2;
+  /* Per datasheet: PGA gain=1.5 is production-calibrated for best accuracy */
+  dsp_cfg.ADCBaseCfg.ADCPga = ADCPGA_1P5;
   
-  /* Disables digital comparator functionality */
   memset(&dsp_cfg.ADCDigCompCfg, 0, sizeof(dsp_cfg.ADCDigCompCfg));
   
-  /* Is this actually being used? */
-  dsp_cfg.ADCFilterCfg.ADCAvgNum = ADCAVGNUM_16; // Impedance example uses 16 
-  dsp_cfg.ADCFilterCfg.ADCRate = ADCRATE_800KHZ;	/* Tell filter block clock rate of ADC*/
+  dsp_cfg.ADCFilterCfg.ADCAvgNum = ADCAVGNUM_16;
+  /* Initial config is LP mode (16MHz), so ADC rate must be 800kHz per datasheet */
+  dsp_cfg.ADCFilterCfg.ADCRate = ADCRATE_800KHZ;
+  dsp_cfg.ADCFilterCfg.ADCSinc2Osr = ADCSINC2OSR_22;
+  /* Per datasheet Table 2: OSR=4 gives 200kSPS with improved noise performance */
+  dsp_cfg.ADCFilterCfg.ADCSinc3Osr = ADCSINC3OSR_4;
 
-  dsp_cfg.ADCFilterCfg.ADCRate = ADCRATE_1P6MHZ;	/* Tell filter block clock rate of ADC*/
-  dsp_cfg.ADCFilterCfg.ADCSinc2Osr = ADCSINC2OSR_22; // Oversampling ratio for SINC2
-  dsp_cfg.ADCFilterCfg.ADCSinc3Osr = ADCSINC3OSR_2; // Oversampling ratio for SINC3
-  /* Using Recommended OSR of 4 for SINC3 */
-  // dsp_cfg.ADCFilterCfg.ADCSinc3Osr = ADCSINC3OSR_4; // Oversampling ratio for SINC3
+  dsp_cfg.ADCFilterCfg.BpNotch = bTRUE;
+  dsp_cfg.ADCFilterCfg.BpSinc3 = bFALSE;
+  dsp_cfg.ADCFilterCfg.Sinc2NotchEnable = bTRUE;
 
-  dsp_cfg.ADCFilterCfg.BpNotch = bTRUE; // Bypasses Notch filter
-  dsp_cfg.ADCFilterCfg.BpSinc3 = bFALSE; // Doesn't bypass SINC3
-  dsp_cfg.ADCFilterCfg.Sinc2NotchEnable = bTRUE; // Enables SINC2 filter
-
-  dsp_cfg.DftCfg.DftNum = DFTNUM_16384; // Max number of DFT points
-  dsp_cfg.DftCfg.DftSrc = DFTSRC_SINC3; // Sets DFT source to SINC3
-  dsp_cfg.DftCfg.HanWinEn = bTRUE;  // Enables HANNING WINDOW - recommended to always be on 
+  dsp_cfg.DftCfg.DftNum = DFTNUM_16384;
+  dsp_cfg.DftCfg.DftSrc = DFTSRC_SINC3;
+  dsp_cfg.DftCfg.HanWinEn = bTRUE;
   
-  /* Disables STAT block */
   memset(&dsp_cfg.StatCfg, 0, sizeof(dsp_cfg.StatCfg));
   
-  AD5940_DSPCfgS(&dsp_cfg); // Sets the DFT 
+  AD5940_DSPCfgS(&dsp_cfg);
+
+  /* Per datasheet ADCBUFCON: 0x005F3D04 for LP mode (<80kHz), chop enabled */
+  AD5940_WriteReg(REG_AFE_ADCBUFCON, 0x005F3D04);
+
   Serial.println("DSP configured successfully.");
 
-  /* Calculating Clock Cycles to wait given DFT settings */
   clks_cal.DataType = DATATYPE_DFT;
-  clks_cal.DftSrc = DFTSRC_SINC3; // Source of DFT
-  clks_cal.DataCount = 1L<<(DFTNUM_16384+2); /* 2^(DFTNUMBER+2) */
+  clks_cal.DftSrc = DFTSRC_SINC3;
+  clks_cal.DataCount = 1L<<(DFTNUM_16384+2);
   clks_cal.ADCSinc2Osr = ADCSINC2OSR_22;
-  clks_cal.ADCSinc3Osr = ADCSINC3OSR_2;
+  clks_cal.ADCSinc3Osr = ADCSINC3OSR_4;
   clks_cal.ADCAvgNum = ADCAVGNUM_16;
-  clks_cal.RatioSys2AdcClk = sysClkFreq / adcClkFreq; // Same ADC / SYSTEM CLCK FREQ
+  clks_cal.RatioSys2AdcClk = sysClkFreq / adcClkFreq;
   AD5940_ClksCalculate(&clks_cal, &_waitClcks);
 
-  /* Clears any interrupts just in case */
   AD5940_ClrMCUIntFlag();
   AD5940_INTCClrFlag(AFEINTSRC_DFTRDY);
 
-  /* Do I need to include AFECTRL_HPREFPWR? It's the only one not here. */
-
-   // Added bias option conditionally 
   if((_biasVolt == 0.0f) && (_zeroVolt == 0.0f))
   {
     AD5940_AFECtrlS(AFECTRL_HSTIAPWR|AFECTRL_INAMPPWR|AFECTRL_EXTBUFPWR|\
@@ -568,18 +556,11 @@ void HELPStat::AD5940_TDD(calHSTIA *gainArr, int gainArrSize) {
   }
   else
   {
-    /* 
-      Also powers the DC offset buffers that's used with LPDAC (Vbias) 
-      Buffers need to be powered up here but aren't turned off in measurement like 
-      the rest. This is to ensure the LPDAC and bias stays on the entire time.
-    */
     AD5940_AFECtrlS(AFECTRL_HSTIAPWR|AFECTRL_INAMPPWR|AFECTRL_EXTBUFPWR|\
                   AFECTRL_WG|AFECTRL_DACREFPWR|AFECTRL_HSDACPWR|\
                   AFECTRL_SINC2NOTCH|AFECTRL_DCBUFPWR, bTRUE);
     Serial.println("Bias is applied.");
   }
-
-  // AD5940_SleepKeyCtrlS(SLPKEY_LOCK); // Disables Sleep Mode 
 
   Serial.println("Everything turned on.");
   printf("Number of points to sweep: %d\n", _sweepCfg.SweepPoints);
@@ -730,20 +711,16 @@ void HELPStat::AD5940_TDD(float startFreq, float endFreq, uint32_t numPoints, fl
     printf("HSTIA bias set to Vzero.\n");
   }
 
-  /* Sets feedback capacitor on HSTIA */
-  HsLoopCfg.HsTiaCfg.HstiaCtia = 31; /* 31pF + 2pF */
-
-  /* No load and RTIA on the D Switch*/
   HsLoopCfg.HsTiaCfg.HstiaDeRload = HSTIADERLOAD_OPEN;
   HsLoopCfg.HsTiaCfg.HstiaDeRtia = HSTIADERTIA_OPEN;
 
-  /* Assuming low frequency measurement */
   HsLoopCfg.HsTiaCfg.HstiaRtiaSel = HSTIARTIA_40K;
+  HsLoopCfg.HsTiaCfg.HstiaCtia = optimalCtia(HSTIARTIA_40K, startFreq);
 
-  HsLoopCfg.SWMatCfg.Dswitch = SWD_CE0;       // Connects WG to CE0
-  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;       // Connects positive input to RE0
-  HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;       // Connects negative input to SE0
-  HsLoopCfg.SWMatCfg.Tswitch = SWT_SE0LOAD|SWT_TRTIA;   // Connects SEO to HSTIA via SE0Load
+  HsLoopCfg.SWMatCfg.Dswitch = SWD_CE0;
+  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;
+  HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;
+  HsLoopCfg.SWMatCfg.Tswitch = SWT_SE0LOAD|SWT_TRTIA;
 
   _currentFreq = startFreq;
   HsLoopCfg.WgCfg.WgType = WGTYPE_SIN;
@@ -817,58 +794,50 @@ void HELPStat::AD5940_TDD(float startFreq, float endFreq, uint32_t numPoints, fl
     Serial.println("LPDAC configured successfully.");
   }
 
-  // /* Sets the input of the ADC to the output of the HSTIA */
   dsp_cfg.ADCBaseCfg.ADCMuxN = ADCMUXN_HSTIA_N;
   dsp_cfg.ADCBaseCfg.ADCMuxP = ADCMUXP_HSTIA_P;
 
-  /* Programmable gain array for the ADC */
-  dsp_cfg.ADCBaseCfg.ADCPga = ADCPGA_1;
-  // dsp_cfg.ADCBaseCfg.ADCPga = ADCPGA_2;
+  /* Per datasheet: PGA gain=1.5 is production-calibrated for best accuracy */
+  dsp_cfg.ADCBaseCfg.ADCPga = ADCPGA_1P5;
   
-  /* Disables digital comparator functionality */
   memset(&dsp_cfg.ADCDigCompCfg, 0, sizeof(dsp_cfg.ADCDigCompCfg));
   
-  /* Is this actually being used? */
-  dsp_cfg.ADCFilterCfg.ADCAvgNum = ADCAVGNUM_16; // Impedance example uses 16 
-  dsp_cfg.ADCFilterCfg.ADCRate = ADCRATE_800KHZ;	/* Tell filter block clock rate of ADC*/
+  dsp_cfg.ADCFilterCfg.ADCAvgNum = ADCAVGNUM_16;
+  /* Initial config is LP mode (16MHz), so ADC rate must be 800kHz per datasheet */
+  dsp_cfg.ADCFilterCfg.ADCRate = ADCRATE_800KHZ;
+  dsp_cfg.ADCFilterCfg.ADCSinc2Osr = ADCSINC2OSR_22;
+  /* Per datasheet Table 2: OSR=4 gives 200kSPS with improved noise performance */
+  dsp_cfg.ADCFilterCfg.ADCSinc3Osr = ADCSINC3OSR_4;
 
-  dsp_cfg.ADCFilterCfg.ADCRate = ADCRATE_1P6MHZ;	/* Tell filter block clock rate of ADC*/
-  dsp_cfg.ADCFilterCfg.ADCSinc2Osr = ADCSINC2OSR_22; // Oversampling ratio for SINC2
-  dsp_cfg.ADCFilterCfg.ADCSinc3Osr = ADCSINC3OSR_2; // Oversampling ratio for SINC3
-  /* Using Recommended OSR of 4 for SINC3 */
-  // dsp_cfg.ADCFilterCfg.ADCSinc3Osr = ADCSINC3OSR_4; // Oversampling ratio for SINC3
+  dsp_cfg.ADCFilterCfg.BpNotch = bTRUE;
+  dsp_cfg.ADCFilterCfg.BpSinc3 = bFALSE;
+  dsp_cfg.ADCFilterCfg.Sinc2NotchEnable = bTRUE;
 
-  dsp_cfg.ADCFilterCfg.BpNotch = bTRUE; // Bypasses Notch filter
-  dsp_cfg.ADCFilterCfg.BpSinc3 = bFALSE; // Doesn't bypass SINC3
-  dsp_cfg.ADCFilterCfg.Sinc2NotchEnable = bTRUE; // Enables SINC2 filter
-
-  dsp_cfg.DftCfg.DftNum = DFTNUM_16384; // Max number of DFT points
-  dsp_cfg.DftCfg.DftSrc = DFTSRC_SINC3; // Sets DFT source to SINC3
-  dsp_cfg.DftCfg.HanWinEn = bTRUE;  // Enables HANNING WINDOW - recommended to always be on 
+  dsp_cfg.DftCfg.DftNum = DFTNUM_16384;
+  dsp_cfg.DftCfg.DftSrc = DFTSRC_SINC3;
+  dsp_cfg.DftCfg.HanWinEn = bTRUE;
   
-  /* Disables STAT block */
   memset(&dsp_cfg.StatCfg, 0, sizeof(dsp_cfg.StatCfg));
   
-  AD5940_DSPCfgS(&dsp_cfg); // Sets the DFT 
+  AD5940_DSPCfgS(&dsp_cfg);
+
+  /* Per datasheet ADCBUFCON: 0x005F3D04 for LP mode (<80kHz), chop enabled */
+  AD5940_WriteReg(REG_AFE_ADCBUFCON, 0x005F3D04);
+
   Serial.println("DSP configured successfully.");
 
-  /* Calculating Clock Cycles to wait given DFT settings */
   clks_cal.DataType = DATATYPE_DFT;
-  clks_cal.DftSrc = DFTSRC_SINC3; // Source of DFT
-  clks_cal.DataCount = 1L<<(DFTNUM_16384+2); /* 2^(DFTNUMBER+2) */
+  clks_cal.DftSrc = DFTSRC_SINC3;
+  clks_cal.DataCount = 1L<<(DFTNUM_16384+2);
   clks_cal.ADCSinc2Osr = ADCSINC2OSR_22;
-  clks_cal.ADCSinc3Osr = ADCSINC3OSR_2;
+  clks_cal.ADCSinc3Osr = ADCSINC3OSR_4;
   clks_cal.ADCAvgNum = ADCAVGNUM_16;
-  clks_cal.RatioSys2AdcClk = sysClkFreq / adcClkFreq; // Same ADC / SYSTEM CLCK FREQ
+  clks_cal.RatioSys2AdcClk = sysClkFreq / adcClkFreq;
   AD5940_ClksCalculate(&clks_cal, &_waitClcks);
 
-  /* Clears any interrupts just in case */
   AD5940_ClrMCUIntFlag();
   AD5940_INTCClrFlag(AFEINTSRC_DFTRDY);
 
-  /* Do I need to include AFECTRL_HPREFPWR? It's the only one not here. */
-
-   // Added bias option conditionally 
   if((biasVolt == 0.0f) && (zeroVolt == 0.0f))
   {
     AD5940_AFECtrlS(AFECTRL_HSTIAPWR|AFECTRL_INAMPPWR|AFECTRL_EXTBUFPWR|\
@@ -878,18 +847,11 @@ void HELPStat::AD5940_TDD(float startFreq, float endFreq, uint32_t numPoints, fl
   }
   else
   {
-    /* 
-      Also powers the DC offset buffers that's used with LPDAC (Vbias) 
-      Buffers need to be powered up here but aren't turned off in measurement like 
-      the rest. This is to ensure the LPDAC and bias stays on the entire time.
-    */
     AD5940_AFECtrlS(AFECTRL_HSTIAPWR|AFECTRL_INAMPPWR|AFECTRL_EXTBUFPWR|\
                   AFECTRL_WG|AFECTRL_DACREFPWR|AFECTRL_HSDACPWR|\
                   AFECTRL_SINC2NOTCH|AFECTRL_DCBUFPWR, bTRUE);
     Serial.println("Bias is applied.");
   }
-
-  // AD5940_SleepKeyCtrlS(SLPKEY_LOCK); // Disables Sleep Mode 
 
   Serial.println("Everything turned on.");
   printf("Number of points to sweep: %d\n", _sweepCfg.SweepPoints);
@@ -914,7 +876,9 @@ void HELPStat::AD5940_DFTMeasure(void) {
   // Serial.print("Recommended clock cycles: ");
   // Serial.println(_waitClcks);
 
-  AD5940_Delay10us(_waitClcks * (1/SYSCLCK));
+  /* Convert clock cycles to 10us units: clks / (clk_freq * 10e-6) */
+  uint32_t delayUnits = (uint32_t)(_waitClcks * 100000.0 / SYSCLCK);
+  AD5940_Delay10us(delayUnits > 0 ? delayUnits : 1);
 
   /* Measuring RCAL */
   sw_cfg.Dswitch = SWD_RCAL0;
@@ -927,46 +891,32 @@ void HELPStat::AD5940_DFTMeasure(void) {
                 AFECTRL_WG|AFECTRL_DACREFPWR|AFECTRL_HSDACPWR|\
                 AFECTRL_SINC2NOTCH, bTRUE);
 
-  AD5940_AFECtrlS(AFECTRL_WG|AFECTRL_ADCPWR, bTRUE);  /* Enable Waveform generator */
-  // delay(500); 
+  AD5940_AFECtrlS(AFECTRL_WG|AFECTRL_ADCPWR, bTRUE);
   settlingDelay(_currentFreq);
   
-  AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT, bTRUE);  /* Start ADC convert and DFT */
-  settlingDelay(_currentFreq);
+  AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT, bTRUE);
 
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
+  /* Wait for DFT to complete: split into two halves per AD sequencer pattern */
+  AD5940_Delay10us(delayUnits / 2 > 0 ? delayUnits / 2 : 1);
+  AD5940_Delay10us(delayUnits / 2 > 0 ? delayUnits / 2 : 1);
 
-  /* Polling and retrieving data from the DFT */
   pollDFT(&realRcal, &imageRcal);
 
-  // AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  // AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-
-  //wait for first data ready
-  AD5940_AFECtrlS(AFECTRL_ADCPWR|AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG, bFALSE);  /* Stop ADC convert and DFT */
+  AD5940_AFECtrlS(AFECTRL_ADCPWR|AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG, bFALSE);
 
   sw_cfg.Dswitch = SWD_CE0;
   sw_cfg.Pswitch = SWP_RE0;
   sw_cfg.Nswitch = SWN_SE0;
   sw_cfg.Tswitch = SWT_TRTIA|SWT_SE0LOAD;
   AD5940_SWMatrixCfgS(&sw_cfg);
-  // Serial.println("Switched to SE0.");
 
-  AD5940_AFECtrlS(AFECTRL_ADCPWR|AFECTRL_WG, bTRUE);  /* Enable Waveform generator */
-  // delay(500);
+  AD5940_AFECtrlS(AFECTRL_ADCPWR|AFECTRL_WG, bTRUE);
   settlingDelay(_currentFreq);
 
-  AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT, bTRUE);  /* Start ADC convert and DFT */
-  settlingDelay(_currentFreq);
-  // delay(500);
+  AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT, bTRUE);
 
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
+  AD5940_Delay10us(delayUnits / 2 > 0 ? delayUnits / 2 : 1);
+  AD5940_Delay10us(delayUnits / 2 > 0 ? delayUnits / 2 : 1);
 
   /* Polling and retrieving data from the DFT */
   pollDFT(&realRz, &imageRz);
@@ -1254,16 +1204,59 @@ void HELPStat::resetSweep(SoftSweepCfg_Type *pSweepCfg, float *pNextFreq) {
 }
 
 void HELPStat::settlingDelay(float freq) {
- 
-  // unsigned long constDelay = (4 * 1000 / freq); // delay constant just in case delay is too small
-  unsigned long constDelay = 1000; // 1000 - delay constant just in case delay is too small 
-   /* Getting the delay time based on frequency */
-  if(freq <= 5) {
-    constDelay = 2000; // 2000
-    delay((unsigned long)(2 * 1000 / freq) + constDelay); // Trying 4 periods to improve Zw results instead of 2
+  /*
+   * Settling delay based on excitation frequency.
+   * The electrochemical cell needs several full AC cycles to reach steady-state
+   * oscillation. Filter pipeline fill time is negligible (<1ms) at all frequencies.
+   *
+   * At very low frequencies, cap the delay to avoid excessively long waits.
+   * At high frequencies, enforce a minimum for analog switch/amplifier transients.
+   */
+  const float SETTLE_PERIODS = 4.0f;
+  const unsigned long MIN_DELAY_MS = 5;
+  const unsigned long MAX_DELAY_MS = 10000;
+
+  unsigned long periodDelay = (unsigned long)(SETTLE_PERIODS * 1000.0f / freq);
+
+  if (periodDelay < MIN_DELAY_MS) periodDelay = MIN_DELAY_MS;
+  if (periodDelay > MAX_DELAY_MS) periodDelay = MAX_DELAY_MS;
+
+  delay(periodDelay);
+}
+
+uint32_t HELPStat::optimalCtia(uint32_t rtia, float freq) {
+  /*
+   * Select CTIA to keep HSTIA bandwidth >= 10× measurement frequency while
+   * maintaining TIA stability.  HSTIA BW ≈ 1/(2π·RTIA·CTIA).
+   * CTIA register value maps to (value + 1) pF of internal capacitance
+   * plus a fixed ~2 pF parasitic, so total ≈ (val+3) pF.
+   *
+   * RTIA constants from ad5940.h encode the register bit pattern, not ohms.
+   * Map the common ones to ohm values for the calculation.
+   */
+  float rtiaOhms;
+  switch (rtia) {
+    case HSTIARTIA_200:  rtiaOhms = 200;    break;
+    case HSTIARTIA_1K:   rtiaOhms = 1000;   break;
+    case HSTIARTIA_5K:   rtiaOhms = 5000;   break;
+    case HSTIARTIA_10K:  rtiaOhms = 10000;  break;
+    case HSTIARTIA_20K:  rtiaOhms = 20000;  break;
+    case HSTIARTIA_40K:  rtiaOhms = 40000;  break;
+    case HSTIARTIA_80K:  rtiaOhms = 80000;  break;
+    case HSTIARTIA_160K: rtiaOhms = 160000; break;
+    default:             return 31;
   }
-  else delay((constDelay)); 
-  
+
+  float targetBW = freq * 10.0f;
+  if (targetBW < 50000.0f) targetBW = 50000.0f;
+
+  float maxCtia_pF = 1.0e12f / (2.0f * 3.14159265f * rtiaOhms * targetBW);
+  int32_t regVal = (int32_t)(maxCtia_pF - 3.0f);
+
+  if (regVal < 1)  regVal = 1;
+  if (regVal > 31) regVal = 31;
+
+  return (uint32_t)regVal;
 }
 
 AD5940Err HELPStat::checkFreq(float freq) {
@@ -1287,198 +1280,112 @@ AD5940Err HELPStat::checkFreq(float freq) {
   
        if(freq < 0.51)
 	{
-    /* Update HSDAC update rate */
-    hsdac_cfg.ExcitBufGain = EXCITBUFGAIN_0P25;
-    hsdac_cfg.HsDacGain = HSDACGAIN_0P2;
-     hsdac_cfg.HsDacUpdateRate = 0x1B;
-    AD5940_HSDacCfgS(&hsdac_cfg);
-    AD5940_HSRTIACfgS(HSTIARTIA_200);
-    // AD5940_HSRTIACfgS(HSTIARTIA_10K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_20K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_40K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_80K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_160K);
-	__AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
-    
-    /*Update ADC rate */
-    filter_cfg.ADCRate = ADCRATE_800KHZ;
-    adcClck = 16e6;
-    
-    /* Change clock to 16MHz oscillator */
-    AD5940_HPModeEn(bFALSE);
-	}
-        else if(freq < 1 )
-	{
-       /* Update HSDAC update rate */
-    // hsdac_cfg.ExcitBufGain =EXCITBUFGAIN_2;// AppIMPCfg.ExcitBufGain;
-    // hsdac_cfg.HsDacGain = HSDACGAIN_1;//AppIMPCfg.HsDacGain;
     hsdac_cfg.ExcitBufGain = EXCITBUFGAIN_0P25;
     hsdac_cfg.HsDacGain = HSDACGAIN_0P2;
     hsdac_cfg.HsDacUpdateRate = 0x1B;
     AD5940_HSDacCfgS(&hsdac_cfg);
     AD5940_HSRTIACfgS(HSTIARTIA_200);
-    // AD5940_HSRTIACfgS(HSTIARTIA_5K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_10K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_20K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_40K);
 	__AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
-    
-    /*Update ADC rate */
     filter_cfg.ADCRate = ADCRATE_800KHZ;
     adcClck = 16e6;
-    
-    /* Change clock to 16MHz oscillator */
     AD5940_HPModeEn(bFALSE);
-    
+    AD5940_WriteReg(REG_AFE_ADCBUFCON, 0x005F3D04);
+	}
+        else if(freq < 1 )
+	{
+    hsdac_cfg.ExcitBufGain = EXCITBUFGAIN_0P25;
+    hsdac_cfg.HsDacGain = HSDACGAIN_0P2;
+    hsdac_cfg.HsDacUpdateRate = 0x1B;
+    AD5940_HSDacCfgS(&hsdac_cfg);
+    AD5940_HSRTIACfgS(HSTIARTIA_200);
+	__AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
+    filter_cfg.ADCRate = ADCRATE_800KHZ;
+    adcClck = 16e6;
+    AD5940_HPModeEn(bFALSE);
+    AD5940_WriteReg(REG_AFE_ADCBUFCON, 0x005F3D04);
 	}
 
   else if(freq < 50)
 	{
-       /* Update HSDAC update rate */
     hsdac_cfg.ExcitBufGain = EXCITBUFGAIN_0P25;
     hsdac_cfg.HsDacGain = HSDACGAIN_0P2;
     hsdac_cfg.HsDacUpdateRate = 0x1B;
     AD5940_HSDacCfgS(&hsdac_cfg);
-    // AD5940_HSRTIACfgS(HSTIARTIA_200);
     AD5940_HSRTIACfgS(HSTIARTIA_1K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_5K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_10K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_20K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_40K);
   __AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
-    
-    /*Update ADC rate */
     filter_cfg.ADCRate = ADCRATE_800KHZ;
     adcClck = 16e6;
-    
-    /* Change clock to 16MHz oscillator */
     AD5940_HPModeEn(bFALSE);
+    AD5940_WriteReg(REG_AFE_ADCBUFCON, 0x005F3D04);
 	}
 
   else if(freq < 400 )
 	{
-       /* Update HSDAC update rate */
-    // hsdac_cfg.ExcitBufGain =EXCITBUFGAIN_2;// AppIMPCfg.ExcitBufGain;
-    // hsdac_cfg.HsDacGain = HSDACGAIN_1;//AppIMPCfg.HsDacGain;
     hsdac_cfg.ExcitBufGain = EXCITBUFGAIN_0P25;
     hsdac_cfg.HsDacGain = HSDACGAIN_0P2;
     hsdac_cfg.HsDacUpdateRate = 0x1B;
     AD5940_HSDacCfgS(&hsdac_cfg);
-    // AD5940_HSRTIACfgS(HSTIARTIA_200);
     AD5940_HSRTIACfgS(HSTIARTIA_1K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_5K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_10K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_20K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_40K);
 	__AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
-    
-    /*Update ADC rate */
     filter_cfg.ADCRate = ADCRATE_800KHZ;
     adcClck = 16e6;
-    
-    /* Change clock to 16MHz oscillator */
     AD5940_HPModeEn(bFALSE);
-    
+    AD5940_WriteReg(REG_AFE_ADCBUFCON, 0x005F3D04);
 	}
 
   else if(freq < 5000 )
 	{
-       /* Update HSDAC update rate */
-    // hsdac_cfg.ExcitBufGain =EXCITBUFGAIN_2;// AppIMPCfg.ExcitBufGain;
-    // hsdac_cfg.HsDacGain = HSDACGAIN_1;//AppIMPCfg.HsDacGain;
     hsdac_cfg.ExcitBufGain = EXCITBUFGAIN_0P25;
     hsdac_cfg.HsDacGain = HSDACGAIN_0P2;
     hsdac_cfg.HsDacUpdateRate = 0x1B;
     AD5940_HSDacCfgS(&hsdac_cfg);
     AD5940_HSRTIACfgS(HSTIARTIA_200);
-    // AD5940_HSRTIACfgS(HSTIARTIA_1K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_5K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_10K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_20K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_40K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_80K);
 	__AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
-    
-    /*Update ADC rate */
     filter_cfg.ADCRate = ADCRATE_800KHZ;
     adcClck = 16e6;
-    
-    /* Change clock to 16MHz oscillator */
     AD5940_HPModeEn(bFALSE);
-    
+    AD5940_WriteReg(REG_AFE_ADCBUFCON, 0x005F3D04);
 	}
 
   else if(freq < 20000 )
 	{
-       /* Update HSDAC update rate */
-    // hsdac_cfg.ExcitBufGain =EXCITBUFGAIN_2;// AppIMPCfg.ExcitBufGain;
-    // hsdac_cfg.HsDacGain = HSDACGAIN_1;//AppIMPCfg.HsDacGain;
     hsdac_cfg.ExcitBufGain = EXCITBUFGAIN_0P25;
     hsdac_cfg.HsDacGain = HSDACGAIN_0P2;
     hsdac_cfg.HsDacUpdateRate = 0x1B;
     AD5940_HSDacCfgS(&hsdac_cfg);
     AD5940_HSRTIACfgS(HSTIARTIA_200);
-    // AD5940_HSRTIACfgS(HSTIARTIA_1K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_5K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_10K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_20K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_40K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_80K);
 	__AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
-    
-    /*Update ADC rate */
     filter_cfg.ADCRate = ADCRATE_800KHZ;
     adcClck = 16e6;
-    
-    /* Change clock to 16MHz oscillator */
     AD5940_HPModeEn(bFALSE);
-    
+    AD5940_WriteReg(REG_AFE_ADCBUFCON, 0x005F3D04);
 	}
   
   else if(freq<80000)
        {
-           /* Update HSDAC update rate */
     hsdac_cfg.ExcitBufGain = EXCITBUFGAIN_0P25;
     hsdac_cfg.HsDacGain = HSDACGAIN_0P2;
     hsdac_cfg.HsDacUpdateRate = 0x1B;
     AD5940_HSDacCfgS(&hsdac_cfg);
     AD5940_HSRTIACfgS(HSTIARTIA_200);
-    // AD5940_HSRTIACfgS(HSTIARTIA_1K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_5K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_20K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_40K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_80K);
 	__AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
-    
-    /*Update ADC rate */
     filter_cfg.ADCRate = ADCRATE_800KHZ;
     adcClck = 16e6;
-    
-    /* Change clock to 16MHz oscillator */
     AD5940_HPModeEn(bFALSE);
+    AD5940_WriteReg(REG_AFE_ADCBUFCON, 0x005F3D04);
        }
-        /* High power mode */
 	if(freq >= 80000)
 	{
-		  /* Update HSDAC update rate */
     hsdac_cfg.ExcitBufGain = EXCITBUFGAIN_0P25;
     hsdac_cfg.HsDacGain = HSDACGAIN_0P2;
     hsdac_cfg.HsDacUpdateRate = 0x07;
     AD5940_HSDacCfgS(&hsdac_cfg);
     AD5940_HSRTIACfgS(HSTIARTIA_200);
-    // AD5940_HSRTIACfgS(HSTIARTIA_1K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_5K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_20K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_40K);
-    // AD5940_HSRTIACfgS(HSTIARTIA_80K);
 	__AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
-    
-    /*Update ADC rate */
     filter_cfg.ADCRate = ADCRATE_1P6MHZ;
     adcClck = 32e6;
-    
-    /* Change clock to 32MHz oscillator */
     AD5940_HPModeEn(bTRUE);
+    AD5940_WriteReg(REG_AFE_ADCBUFCON, REG_AFE_ADCBUFCON_RESET);
 	}
   
   /* Step 2: Adjust ADCFILTERCON and DFTCON to set optimumn SINC3, SINC2 and DFTNUM settings  */
@@ -1858,20 +1765,16 @@ void HELPStat::AD5940_BiasCfg(float startFreq, float endFreq, uint32_t numPoints
   if(biasVolt != 0.0f) HsLoopCfg.HsTiaCfg.HstiaBias = HSTIABIAS_VZERO0;
   else HsLoopCfg.HsTiaCfg.HstiaBias = HSTIABIAS_1P1;
 
-  /* Sets feedback capacitor on HSTIA */
-  HsLoopCfg.HsTiaCfg.HstiaCtia = 31; /* 31pF + 2pF */
-
-  /* No load and RTIA on the D Switch*/
   HsLoopCfg.HsTiaCfg.HstiaDeRload = HSTIADERLOAD_OPEN;
   HsLoopCfg.HsTiaCfg.HstiaDeRtia = HSTIADERTIA_OPEN;
 
-  /* Assuming low frequency measurement */
   HsLoopCfg.HsTiaCfg.HstiaRtiaSel = HSTIARTIA_40K;
+  HsLoopCfg.HsTiaCfg.HstiaCtia = optimalCtia(HSTIARTIA_40K, startFreq);
 
-  HsLoopCfg.SWMatCfg.Dswitch = SWD_CE0;       // Connects WG to CE0
-  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;       // Connects positive input to RE0
-  HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;       // Connects negative input to SE0
-  HsLoopCfg.SWMatCfg.Tswitch = SWT_SE0LOAD | SWT_TRTIA;   // Connects SEO to HSTIA via SE0Load
+  HsLoopCfg.SWMatCfg.Dswitch = SWD_CE0;
+  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;
+  HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;
+  HsLoopCfg.SWMatCfg.Tswitch = SWT_SE0LOAD | SWT_TRTIA;
 
   HsLoopCfg.WgCfg.WgType = WGTYPE_SIN;
   
@@ -2043,19 +1946,16 @@ void HELPStat::AD5940_DFTMeasureEIS(void) {
   LPAmpCfg_Type LpAmpCfg;
   impStruct eis;
 
-  /* Real / Imaginary components */
   int32_t realRcal, imageRcal; 
   int32_t realRload, imageRload; 
   int32_t realRzRload, imageRzRload; 
 
-  // float rcalVal = 10030; // known Rcal
-
-  /* Using fImpCar struct from AD */
   fImpCar_Type rCal, rzRload, rLoad;
-  fImpCar_Type DftConst1 = {1.0f, 0}; // needed for floating point math
-  fImpCar_Type temp1, temp2, res; // placeholder values
+  fImpCar_Type DftConst1 = {1.0f, 0};
+  fImpCar_Type temp1, temp2, res;
 
-  AD5940_Delay10us(_waitClcks * (1/SYSCLCK));
+  uint32_t delayUnitsEIS = (uint32_t)(_waitClcks * 100000.0 / SYSCLCK);
+  AD5940_Delay10us(delayUnitsEIS > 0 ? delayUnitsEIS : 1);
 
   /* Disconnect SE0 from LPTIA*/
 	// LpAmpCfg.LpAmpPwrMod = LPAMPPWR_NORM;
@@ -2081,63 +1981,48 @@ void HELPStat::AD5940_DFTMeasureEIS(void) {
   settlingDelay(_currentFreq);
 
 
-  AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT, bTRUE);  /* Start ADC convert and DFT */
+  AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT, bTRUE);
   settlingDelay(_currentFreq);
 
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
+  AD5940_Delay10us(delayUnitsEIS / 2 > 0 ? delayUnitsEIS / 2 : 1);
+  AD5940_Delay10us(delayUnitsEIS / 2 > 0 ? delayUnitsEIS / 2 : 1);
 
-  /* Polling and retrieving data from the DFT */
   pollDFT(&realRzRload, &imageRzRload);
-  AD5940_AFECtrlS(AFECTRL_ADCPWR|AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG, bFALSE);  /* Stop ADC convert and DFT */
+  AD5940_AFECtrlS(AFECTRL_ADCPWR|AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG, bFALSE);
 
-   /* Measuring Rload */
   sw_cfg.Dswitch = SWD_SE0;
   sw_cfg.Pswitch = SWP_SE0;
   sw_cfg.Nswitch = SWN_SE0LOAD;
   sw_cfg.Tswitch = SWT_SE0LOAD|SWT_TRTIA;
   AD5940_SWMatrixCfgS(&sw_cfg);
-	// delay(100); // empirical delay for switching 
 
-  AD5940_AFECtrlS(AFECTRL_WG|AFECTRL_ADCPWR, bTRUE);  /* Enable Waveform generator */
-  // delay(500);
+  AD5940_AFECtrlS(AFECTRL_WG|AFECTRL_ADCPWR, bTRUE);
   settlingDelay(_currentFreq);
 
-  AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT, bTRUE);  /* Start ADC convert and DFT */
+  AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT, bTRUE);
   settlingDelay(_currentFreq);
 
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
+  AD5940_Delay10us(delayUnitsEIS / 2 > 0 ? delayUnitsEIS / 2 : 1);
+  AD5940_Delay10us(delayUnitsEIS / 2 > 0 ? delayUnitsEIS / 2 : 1);
 
-  /* Polling and retrieving data from the DFT */
   pollDFT(&realRload, &imageRload);
 
-  /* Shutting off ADC and AFE */
-  AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG|AFECTRL_ADCPWR, bFALSE);  /* Stop ADC convert and DFT */
+  AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG|AFECTRL_ADCPWR, bFALSE);
 
-  /* Measuring RCAL */
   sw_cfg.Dswitch = SWD_RCAL0;
   sw_cfg.Pswitch = SWP_RCAL0;
   sw_cfg.Nswitch = SWN_RCAL1;
   sw_cfg.Tswitch = SWT_RCAL1|SWT_TRTIA;
   AD5940_SWMatrixCfgS(&sw_cfg);
-	// delay(100); // empirical delay for switching 
 
-  AD5940_AFECtrlS(AFECTRL_WG|AFECTRL_ADCPWR, bTRUE);  /* Enable Waveform generator */
-  // delay(500);
+  AD5940_AFECtrlS(AFECTRL_WG|AFECTRL_ADCPWR, bTRUE);
   settlingDelay(_currentFreq);
 
-  AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT, bTRUE);  /* Start ADC convert and DFT */
+  AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT, bTRUE);
   settlingDelay(_currentFreq);
   
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
+  AD5940_Delay10us(delayUnitsEIS / 2 > 0 ? delayUnitsEIS / 2 : 1);
+  AD5940_Delay10us(delayUnitsEIS / 2 > 0 ? delayUnitsEIS / 2 : 1);
 
   /* Polling and retrieving data from the DFT */
   pollDFT(&realRcal, &imageRcal);
@@ -2221,43 +2106,39 @@ void HELPStat::configureDFT(float freq) {
   {
     filter_cfg.ADCRate = ADCRATE_1P6MHZ;
     adcClck = 32e6;
-    AD5940_HPModeEn(bTRUE); // High Power Mode
-    // Serial.println("HP Mode On");
+    AD5940_HPModeEn(bTRUE);
+    AD5940_WriteReg(REG_AFE_ADCBUFCON, REG_AFE_ADCBUFCON_RESET);
   }
   else
   {
     filter_cfg.ADCRate = ADCRATE_800KHZ;
     adcClck = 16e6;
-    AD5940_HPModeEn(bFALSE); // Low Power Mode
-    // Serial.println("LP Mode On");
+    AD5940_HPModeEn(bFALSE);
+    AD5940_WriteReg(REG_AFE_ADCBUFCON, 0x005F3D04);
   }
 
-  filter_cfg.ADCAvgNum = ADCAVGNUM_16;  // Not using this so it doesn't matter 
+  filter_cfg.ADCAvgNum = ADCAVGNUM_16;
   filter_cfg.ADCSinc2Osr = freq_params.ADCSinc2Osr;
   filter_cfg.ADCSinc3Osr = freq_params.ADCSinc3Osr;
   filter_cfg.BpSinc3 = bFALSE;
-  filter_cfg.BpNotch = _enableNotchFilter ? bFALSE : bTRUE; // Use configured notch filter setting
+  filter_cfg.BpNotch = _enableNotchFilter ? bFALSE : bTRUE;
   filter_cfg.Sinc2NotchEnable = bTRUE;
   
   dft_cfg.DftNum = freq_params.DftNum;
   dft_cfg.DftSrc = freq_params.DftSrc;
   dft_cfg.HanWinEn = bTRUE;
-  // Serial.println("Filter and DFT configured.");
 
   AD5940_ADCFilterCfgS(&filter_cfg);
   AD5940_DFTCfgS(&dft_cfg);
 
-  /* Calculating clock cycles - usually used for FIFO but I use it here
-  as an additional wait time calculator. Potentially redundant, but keeping it for now.*/
   clks_cal.DataType = DATATYPE_DFT;
   clks_cal.DftSrc = freq_params.DftSrc;
-  clks_cal.DataCount = 1L<<(freq_params.DftNum+2); /* 2^(DFTNUMBER+2) */
+  clks_cal.DataCount = 1L<<(freq_params.DftNum+2);
   clks_cal.ADCSinc2Osr = freq_params.ADCSinc2Osr;
   clks_cal.ADCSinc3Osr = freq_params.ADCSinc3Osr;
   clks_cal.ADCAvgNum = 0;
   clks_cal.RatioSys2AdcClk = SYSCLCK/adcClck;
   AD5940_ClksCalculate(&clks_cal, &_waitClcks);
-  // Serial.println("Clocks calculated.");
 }
 
 AD5940Err HELPStat::setHSTIA(float freq) {
@@ -2291,23 +2172,25 @@ AD5940Err HELPStat::setHSTIA(float freq) {
   {
     if(freq <= _gainArr[i].freq) 
     {
-      if(freq >= 80000) // High Power Mode Case
+      if(freq >= 80000)
       {
         hsdac_cfg.HsDacUpdateRate = 0x07;
         AD5940_HSDacCfgS(&hsdac_cfg);
         AD5940_HSRTIACfgS(_gainArr[i].rTIA);
       __AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
-        
-        // AD5940_HPModeEn(bTRUE);
-        // printf("Setting HSTIA to: %d for %.2f Hz\n", _gainArr[i].rTIA, freq);
+        {
+          uint32_t ctiaReg = AD5940_ReadReg(REG_AFE_HSRTIACON);
+          ctiaReg &= ~BITM_AFE_HSRTIACON_CTIACON;
+          ctiaReg |= optimalCtia(_gainArr[i].rTIA, freq) << BITP_AFE_HSRTIACON_CTIACON;
+          AD5940_WriteReg(REG_AFE_HSRTIACON, ctiaReg);
+        }
 
         filter_cfg.ADCRate = ADCRATE_1P6MHZ;
         adcClck = 32e6;
         AD5940_HPModeEn(bTRUE);
+        AD5940_WriteReg(REG_AFE_ADCBUFCON, REG_AFE_ADCBUFCON_RESET);
         exitStatus = AD5940ERR_OK;
         break;
-
-        // return AD5940ERR_OK;
       }
       else
       {
@@ -2315,17 +2198,19 @@ AD5940Err HELPStat::setHSTIA(float freq) {
         AD5940_HSDacCfgS(&hsdac_cfg);
         AD5940_HSRTIACfgS(_gainArr[i].rTIA);
       __AD5940_SetDExRTIA(0, HSTIADERTIA_OPEN, HSTIADERLOAD_0R);
-
-        // AD5940_HPModeEn(bFALSE);
-        // printf("Setting HSTIA to: %d for %.2f Hz\n", _gainArr[i].rTIA, freq);
+        {
+          uint32_t ctiaReg = AD5940_ReadReg(REG_AFE_HSRTIACON);
+          ctiaReg &= ~BITM_AFE_HSRTIACON_CTIACON;
+          ctiaReg |= optimalCtia(_gainArr[i].rTIA, freq) << BITP_AFE_HSRTIACON_CTIACON;
+          AD5940_WriteReg(REG_AFE_HSRTIACON, ctiaReg);
+        }
 
         filter_cfg.ADCRate = ADCRATE_800KHZ;
         adcClck = 16e6;
-        AD5940_HPModeEn(bFALSE); // Low Power Mode
+        AD5940_HPModeEn(bFALSE);
+        AD5940_WriteReg(REG_AFE_ADCBUFCON, 0x005F3D04);
         exitStatus = AD5940ERR_OK;
         break;
-
-        // return AD5940ERR_OK;
       }
     }
   }
@@ -2515,20 +2400,16 @@ void HELPStat::AD5940_TDDNoise(float biasVolt, float zeroVolt) {
     printf("HSTIA bias set to Vzero.\n");
   }
 
-  /* Sets feedback capacitor on HSTIA */
-  HsLoopCfg.HsTiaCfg.HstiaCtia = 31; /* 31pF + 2pF */
-
-  /* No load and RTIA on the D Switch*/
   HsLoopCfg.HsTiaCfg.HstiaDeRload = HSTIADERLOAD_OPEN;
   HsLoopCfg.HsTiaCfg.HstiaDeRtia = HSTIADERTIA_OPEN;
 
-  /* Assuming low frequency measurement */
   HsLoopCfg.HsTiaCfg.HstiaRtiaSel = HSTIARTIA_10K;
+  HsLoopCfg.HsTiaCfg.HstiaCtia = optimalCtia(HSTIARTIA_10K, _startFreq);
 
-  HsLoopCfg.SWMatCfg.Dswitch = SWD_CE0;       // Connects WG to CE0
-  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;       // Connects positive input to RE0
-  HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;       // Connects negative input to SE0
-  HsLoopCfg.SWMatCfg.Tswitch = SWT_SE0LOAD|SWT_TRTIA;   // Connects SEO to HSTIA via SE0Load
+  HsLoopCfg.SWMatCfg.Dswitch = SWD_CE0;
+  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;
+  HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;
+  HsLoopCfg.SWMatCfg.Tswitch = SWT_SE0LOAD|SWT_TRTIA;
 
   /*
     Shouldn't matter since WG is going to be connected to CE0. 

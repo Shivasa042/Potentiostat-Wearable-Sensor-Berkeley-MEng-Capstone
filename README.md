@@ -1,6 +1,6 @@
 # HELPStat — Wearable Potentiostat / EIS Sensor
 
-A portable Electrochemical Impedance Spectroscopy (EIS) system built around an **ESP32-S3** microcontroller and the **Analog Devices AD5940** analog front-end. Designed for wearable biosensing applications such as real-time sweat analysis, the board performs frequency-swept impedance measurements and delivers results over **USB serial**, **Bluetooth Low Energy (BLE)**, and **SD card** storage.
+A portable Electrochemical Impedance Spectroscopy (EIS) system built around an **ESP32-S3** microcontroller and the **Analog Devices AD5940** analog front-end. Designed for wearable biosensing applications such as real-time sweat analysis, the board performs frequency-swept impedance measurements over the **1 Hz – 200 kHz** range and delivers results over **USB serial**, **Bluetooth Low Energy (BLE)**, and **SD card** storage.
 
 ## Table of Contents
 
@@ -29,7 +29,7 @@ A portable Electrochemical Impedance Spectroscopy (EIS) system built around an *
 ## What This Project Does
 
 1. **Generates a sinusoidal AC excitation** via the AD5940's waveform generator (WGTYPE_SIN).
-2. **Sweeps across a configurable frequency range** (e.g. 10 Hz to 100 kHz) with a programmable number of points per decade.
+2. **Sweeps across a configurable frequency range** (default 1 Hz – 200 kHz) with a programmable number of points per decade.
 3. **Measures the complex impedance** (real, imaginary, magnitude, phase) at each frequency using the AD5940's on-chip DFT engine.
 4. **Outputs results** as CSV over USB serial, transmits via BLE to a phone app, and/or saves to an SD card.
 5. **Calculates equivalent circuit parameters** (Rct, Rs) using a Levenberg-Marquardt fit.
@@ -152,8 +152,8 @@ Best for: development, debugging, and quick characterization.
 2. Type commands directly:
    ```
    HELP                    — list all commands
-   MEASURE:SAMPLE          — run default 10 Hz – 100 kHz sweep
-   MEASURE:0,10,100000,10,0,0,1000,1,1,127000,150,0,0,200  — custom sweep
+   MEASURE:SAMPLE          — run default 1 Hz – 200 kHz sweep
+   MEASURE:0,200000,1,10,0,0,1000,1,1,127000,150,0,0,200   — custom sweep
    ```
 3. CSV data prints to the terminal. Copy-paste into a spreadsheet or use the Python scripts below.
 
@@ -164,12 +164,12 @@ Best for: field measurements without any computer.
 1. Flash the firmware once (via Scenario 1).
 2. Insert a FAT32-formatted MicroSD card.
 3. Power the board via USB power bank or LiPo battery.
-4. **Press the button on GPIO 7** to start a default EIS sweep (10 Hz – 100 kHz, 200 mV amplitude).
+4. **Press the button on GPIO 7** to start a default EIS sweep (1 Hz – 200 kHz, 200 mV amplitude).
 5. The LED turns off during measurement and turns back on when complete.
-6. Results are saved to the SD card at `/eis/sweep_10Hz_100kHz.csv`.
+6. Results are saved to the SD card at `/eis/sweep_1Hz_200kHz.csv`.
 7. Remove the SD card and convert the CSV to Excel:
    ```bash
-   python eis_csv_to_xlsx.py --in sweep_10Hz_100kHz.csv --out results.xlsx
+   python eis_csv_to_xlsx.py --in sweep_1Hz_200kHz.csv --out results.xlsx
    ```
 
 ### Scenario 3 — Battery-Powered Wearable with BLE
@@ -230,7 +230,7 @@ All commands are sent over USB serial at **115200 baud**, terminated by a newlin
 | `SHOW` | Print current configuration parameters |
 | `CHECK` | Read the AD5940 chip ID to verify SPI connectivity |
 | `MEASURE` | Start measurement with current parameters |
-| `MEASURE:SAMPLE` | Run default EIS sweep (10 Hz – 100 kHz) |
+| `MEASURE:SAMPLE` | Run default EIS sweep (1 Hz – 200 kHz) |
 | `MEASURE:<14 params>` | Start measurement with inline parameters |
 | `SET:<14 params>` | Set parameters without starting a measurement |
 
@@ -263,8 +263,8 @@ A legacy 12-parameter format (without mode and amplitude) is also supported for 
 
 ```
 MEASURE:SAMPLE
-MEASURE:0,200000,10,5,0,0,1000,1,1,127000,150,0,0,200
-MEASURE:0,10,100000,10,0,0,1000,1,1,127000,150,0,0,100
+MEASURE:0,200000,1,10,0,0,1000,1,1,127000,150,0,0,200
+MEASURE:0,200000,100,5,0,0,1000,1,1,127000,150,0,0,100
 SET:0,100,50000,20,0,0,1000,1,1,127000,150,0,0,150
 ```
 
@@ -350,6 +350,22 @@ build_flags =
 5. **Impedance** is calculated: Z = V_excitation / I_measured, decomposed into real (Z') and imaginary (Z'') parts.
 6. The firmware sweeps through all frequencies, performing RCAL (calibration) and RZ (unknown impedance) measurements at each point.
 7. Results are output as CSV, transmitted via BLE, and saved to SD card.
+
+---
+
+## AD5940 Datasheet-Driven Improvements
+
+The firmware incorporates several corrections and optimizations derived from the [AD5940/AD5941 datasheet](https://www.analog.com/media/en/technical-documentation/data-sheets/ad5940-5941.pdf):
+
+| Change | Detail |
+|--------|--------|
+| **ADC rate fix** | Removed accidental 1.6 MHz overwrite in Low Power mode; correctly uses 800 kHz for frequencies below 80 kHz. |
+| **ADCBUFCON register** | ADC buffer chop mode is now explicitly configured when switching between LP (<80 kHz) and HP (>=80 kHz) modes across all measurement paths. |
+| **PGA gain** | Switched from `ADCPGA_1` to `ADCPGA_1P5`, the production-calibrated default recommended by the datasheet. |
+| **SINC filter OSR** | SINC3 OSR raised from 2 to 4 and SINC2 OSR set to 22 for improved noise rejection at 200 kSPS. |
+| **DFT delay calculation** | Fixed a zero-delay bug where `_waitClcks * (1/SYSCLCK)` evaluated to 0 due to integer division; now uses proper floating-point conversion. |
+| **Settling delay** | Replaced flat 1-second delay with frequency-proportional timing (4 excitation periods, bounded 5 ms – 10 s), significantly speeding up mid- and high-frequency sweeps. |
+| **Dynamic CTIA selection** | HSTIA feedback capacitance is now computed from the RTIA value and measurement frequency to maintain adequate TIA bandwidth (>=10x excitation frequency). |
 
 ---
 
