@@ -123,7 +123,7 @@ void HELPStat::AD5940ImpedanceStructInit(float startFreq, float endFreq, uint32_
     /* Set switch matrix to onboard(EVAL-AD5940ELECZ) dummy sensor. */
     /* Note the RCAL0 resistor is 10kOhm. */
     pImpedanceCfg->DswitchSel = SWD_CE0;
-    pImpedanceCfg->PswitchSel = SWP_RE0;
+    pImpedanceCfg->PswitchSel = SWP_CE0;
     pImpedanceCfg->NswitchSel = SWN_SE0;
     pImpedanceCfg->TswitchSel = SWT_SE0LOAD;
     
@@ -430,7 +430,7 @@ void HELPStat::AD5940_TDD(calHSTIA *gainArr, int gainArrSize) {
   HsLoopCfg.HsTiaCfg.HstiaCtia = optimalCtia(HSTIARTIA_40K, _startFreq);
 
   HsLoopCfg.SWMatCfg.Dswitch = SWD_CE0;
-  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;
+  HsLoopCfg.SWMatCfg.Pswitch = SWP_CE0;
   HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;
   HsLoopCfg.SWMatCfg.Tswitch = SWT_SE0LOAD|SWT_TRTIA;
 
@@ -718,7 +718,7 @@ void HELPStat::AD5940_TDD(float startFreq, float endFreq, uint32_t numPoints, fl
   HsLoopCfg.HsTiaCfg.HstiaCtia = optimalCtia(HSTIARTIA_40K, startFreq);
 
   HsLoopCfg.SWMatCfg.Dswitch = SWD_CE0;
-  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;
+  HsLoopCfg.SWMatCfg.Pswitch = SWP_CE0;
   HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;
   HsLoopCfg.SWMatCfg.Tswitch = SWT_SE0LOAD|SWT_TRTIA;
 
@@ -905,7 +905,7 @@ void HELPStat::AD5940_DFTMeasure(void) {
   AD5940_AFECtrlS(AFECTRL_ADCPWR|AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG, bFALSE);
 
   sw_cfg.Dswitch = SWD_CE0;
-  sw_cfg.Pswitch = SWP_RE0;
+  sw_cfg.Pswitch = SWP_CE0;
   sw_cfg.Nswitch = SWN_SE0;
   sw_cfg.Tswitch = SWT_TRTIA|SWT_SE0LOAD;
   AD5940_SWMatrixCfgS(&sw_cfg);
@@ -1772,7 +1772,7 @@ void HELPStat::AD5940_BiasCfg(float startFreq, float endFreq, uint32_t numPoints
   HsLoopCfg.HsTiaCfg.HstiaCtia = optimalCtia(HSTIARTIA_40K, startFreq);
 
   HsLoopCfg.SWMatCfg.Dswitch = SWD_CE0;
-  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;
+  HsLoopCfg.SWMatCfg.Pswitch = SWP_CE0;
   HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;
   HsLoopCfg.SWMatCfg.Tswitch = SWT_SE0LOAD | SWT_TRTIA;
 
@@ -1970,7 +1970,7 @@ void HELPStat::AD5940_DFTMeasureEIS(void) {
 
   /* Measuring Rload and Rz */
   sw_cfg.Dswitch = SWD_CE0;
-  sw_cfg.Pswitch = SWP_RE0;
+  sw_cfg.Pswitch = SWP_CE0;
   sw_cfg.Nswitch = SWN_SE0;
   sw_cfg.Tswitch = SWT_TRTIA|SWT_SE0LOAD;
   AD5940_SWMatrixCfgS(&sw_cfg);
@@ -2407,7 +2407,7 @@ void HELPStat::AD5940_TDDNoise(float biasVolt, float zeroVolt) {
   HsLoopCfg.HsTiaCfg.HstiaCtia = optimalCtia(HSTIARTIA_10K, _startFreq);
 
   HsLoopCfg.SWMatCfg.Dswitch = SWD_CE0;
-  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;
+  HsLoopCfg.SWMatCfg.Pswitch = SWP_CE0;
   HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;
   HsLoopCfg.SWMatCfg.Tswitch = SWT_SE0LOAD|SWT_TRTIA;
 
@@ -2566,7 +2566,7 @@ void HELPStat::AD5940_ADCMeasure(void) {
 
   /* Measuring ADC */
   sw_cfg.Dswitch = SWD_CE0; // CE0 disconnected from Output
-  sw_cfg.Pswitch = SWP_RE0;
+  sw_cfg.Pswitch = SWP_CE0;
   sw_cfg.Nswitch = SWN_SE0;
   sw_cfg.Tswitch = SWT_SE0LOAD|SWT_TRTIA;
 
@@ -2666,7 +2666,7 @@ void HELPStat::ADCNoiseTest(void) {
   */
 
   sw_cfg.Dswitch = SWD_OPEN;
-  sw_cfg.Pswitch = SWP_RE0;
+  sw_cfg.Pswitch = SWP_CE0;
   sw_cfg.Nswitch = SWN_SE0;
   sw_cfg.Tswitch = SWT_SE0LOAD|SWT_TRTIA;
   AD5940_SWMatrixCfgS(&sw_cfg);
@@ -3443,7 +3443,7 @@ void HELPStat::AD5940_DFTMeasureWithAveraging(int numAverages) {
     
     // Measure Rz
     sw_cfg.Dswitch = SWD_CE0;
-    sw_cfg.Pswitch = SWP_RE0;
+    sw_cfg.Pswitch = SWP_CE0;
     sw_cfg.Nswitch = SWN_SE0;
     sw_cfg.Tswitch = SWT_TRTIA|SWT_SE0LOAD;
     AD5940_SWMatrixCfgS(&sw_cfg);
@@ -3854,7 +3854,7 @@ void HELPStat::runCV(void) {
   // N: SE0 (working electrode) - connects to HSTIA negative input for current measurement
   // T: Connect SE0 to HSTIA input (TRTIA) and enable SE0LOAD
   HsLoopCfg.SWMatCfg.Dswitch = SWD_OPEN;   // CE0 driven by LPPA (not HSDAC)
-  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;    // Reference electrode (voltage sense)
+  HsLoopCfg.SWMatCfg.Pswitch = SWP_CE0;    // 2-electrode: sense voltage at CE0
   HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;    // Working electrode (current flows here)
   HsLoopCfg.SWMatCfg.Tswitch = SWT_TRTIA|SWT_SE0LOAD; // Connect SE0 to HSTIA input
   
@@ -4101,7 +4101,7 @@ void HELPStat::runIT(void) {
   HsLoopCfg.HsTiaCfg.HstiaDeRtia = HSTIADERTIA_OPEN;
   HsLoopCfg.HsTiaCfg.HstiaRtiaSel = HSTIARTIA_10K;
   HsLoopCfg.SWMatCfg.Dswitch = SWD_CE0;
-  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;
+  HsLoopCfg.SWMatCfg.Pswitch = SWP_CE0;
   HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;
   HsLoopCfg.SWMatCfg.Tswitch = SWT_TRTIA|SWT_SE0LOAD;
   AD5940_HSLoopCfgS(&HsLoopCfg);
@@ -4173,7 +4173,7 @@ void HELPStat::runCP(void) {
   HsLoopCfg.HsTiaCfg.HstiaDeRtia = HSTIADERTIA_OPEN;
   HsLoopCfg.HsTiaCfg.HstiaRtiaSel = rTIA;
   HsLoopCfg.SWMatCfg.Dswitch = SWD_CE0;
-  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;
+  HsLoopCfg.SWMatCfg.Pswitch = SWP_CE0;
   HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;
   HsLoopCfg.SWMatCfg.Tswitch = SWT_TRTIA|SWT_SE0LOAD;
   AD5940_HSLoopCfgS(&HsLoopCfg);
@@ -4266,7 +4266,7 @@ void HELPStat::runDPV(void) {
   HsLoopCfg.HsTiaCfg.HstiaDeRtia = HSTIADERTIA_OPEN;
   HsLoopCfg.HsTiaCfg.HstiaRtiaSel = HSTIARTIA_10K;
   HsLoopCfg.SWMatCfg.Dswitch = SWD_CE0;
-  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;
+  HsLoopCfg.SWMatCfg.Pswitch = SWP_CE0;
   HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;
   HsLoopCfg.SWMatCfg.Tswitch = SWT_TRTIA|SWT_SE0LOAD;
   AD5940_HSLoopCfgS(&HsLoopCfg);
@@ -4368,7 +4368,7 @@ void HELPStat::runSWV(void) {
   HsLoopCfg.HsTiaCfg.HstiaDeRtia = HSTIADERTIA_OPEN;
   HsLoopCfg.HsTiaCfg.HstiaRtiaSel = HSTIARTIA_10K;
   HsLoopCfg.SWMatCfg.Dswitch = SWD_CE0;
-  HsLoopCfg.SWMatCfg.Pswitch = SWP_RE0;
+  HsLoopCfg.SWMatCfg.Pswitch = SWP_CE0;
   HsLoopCfg.SWMatCfg.Nswitch = SWN_SE0;
   HsLoopCfg.SWMatCfg.Tswitch = SWT_TRTIA|SWT_SE0LOAD;
   
@@ -4468,7 +4468,7 @@ void HELPStat::runOCP(void) {
   // Configure switch matrix to disconnect excitation
   SWMatrixCfg_Type sw_cfg;
   sw_cfg.Dswitch = SWD_OPEN;  // Disconnect waveform generator
-  sw_cfg.Pswitch = SWP_RE0;   // Connect reference electrode
+  sw_cfg.Pswitch = SWP_CE0;   // 2-electrode: sense voltage at CE0
   sw_cfg.Nswitch = SWN_SE0;   // Connect sense electrode
   sw_cfg.Tswitch = 0;         // Disconnect TIA (open circuit)
   AD5940_SWMatrixCfgS(&sw_cfg);

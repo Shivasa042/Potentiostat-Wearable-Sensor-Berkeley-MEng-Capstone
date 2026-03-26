@@ -1,6 +1,6 @@
 # HELPStat — Wearable Potentiostat / EIS Sensor
 
-A portable Electrochemical Impedance Spectroscopy (EIS) system built around an **ESP32-S3** microcontroller and the **Analog Devices AD5940** analog front-end. Designed for wearable biosensing applications such as real-time sweat analysis, the board performs frequency-swept impedance measurements over the **1 Hz – 200 kHz** range and delivers results over **USB serial**, **Bluetooth Low Energy (BLE)**, and **SD card** storage.
+A portable Electrochemical Impedance Spectroscopy (EIS) system built around an **ESP32-S3** microcontroller and the **Analog Devices AD5940** analog front-end. Designed for wearable biosensing applications such as real-time sweat analysis on a smartwatch, the board performs frequency-swept impedance measurements over the **1 Hz – 200 kHz** range using a **2-electrode** configuration and delivers results over **USB serial**, **Bluetooth Low Energy (BLE)**, and **SD card** storage. In standalone wearable mode the firmware automatically triggers EIS sweeps on a configurable timer and waits between sweeps (USB serial stays responsive for development).
 
 ## Table of Contents
 
@@ -18,6 +18,7 @@ A portable Electrochemical Impedance Spectroscopy (EIS) system built around an *
   - [Scenario 4 — Automated Data Collection (Python)](#scenario-4--automated-data-collection-python)
 - [Serial Command Reference](#serial-command-reference)
 - [Python Scripts](#python-scripts)
+- [Analyzing EIS Data (Nyquist and Bode)](#analyzing-eis-data-nyquist-and-bode)
 - [Pin Configuration](#pin-configuration)
 - [Custom PCB Support](#custom-pcb-support)
 - [How EIS Works on This Board](#how-eis-works-on-this-board)
@@ -54,6 +55,7 @@ The system supports seven measurement modes (EIS is fully implemented; others ar
 |-----------|-------------|
 | **MCU** | ESP32-S3 (240 MHz dual-core, Wi-Fi + BLE 5.0) |
 | **AFE** | AD5940 / AD5941 analog front-end (waveform generator, DFT engine, programmable gain TIA) |
+| **Electrodes** | 2-electrode configuration (CE0 + SE0) — no separate reference electrode needed |
 | **Interface** | SPI between ESP32-S3 and AD5940 |
 | **Storage** | MicroSD card slot (SPI) |
 | **Wireless** | BLE for real-time data streaming to a companion Android app |
@@ -90,6 +92,7 @@ The system supports seven measurement modes (EIS is fully implemented; others ar
 ├── send_eis_sample.py         # CLI tool with --port, --start-hz, --end-hz, --out options
 ├── eis_csv_to_xlsx.py         # Convert SD card CSV to Excel
 ├── eis_example.py             # Example: sweep + Nyquist/Bode plotting
+├── plot_eis_from_file.py      # Nyquist + Bode from saved CSV or Excel
 ├── platformio.ini             # PlatformIO build configuration
 ├── requirements.txt           # Python dependencies
 └── README.md                  # This file
@@ -172,18 +175,27 @@ Best for: field measurements without any computer.
    python eis_csv_to_xlsx.py --in sweep_1Hz_200kHz.csv --out results.xlsx
    ```
 
-### Scenario 3 — Battery-Powered Wearable with BLE
+### Scenario 3 — Battery-Powered Wearable with BLE (Apple Watch / Smartwatch Sweat Sensor)
 
-Best for: continuous real-time monitoring (e.g. sweat analysis).
+Best for: continuous autonomous sweat monitoring with a 2-electrode sensor.
 
-1. Flash the firmware once.
-2. Power the board from a 3.7 V LiPo battery.
-3. On your Android phone, open the **HELPStat companion app** (source in `Originallibraries/`).
-4. Scan for BLE devices and connect to `HELPStat`.
-5. Press the physical button to trigger a sweep, or send parameters via BLE.
-6. Real-time impedance data (frequency, real, imaginary, magnitude, phase) streams to the app via BLE notifications.
+The board is designed to operate standalone — no USB cable or laptop required at runtime.
 
-The board does **not** require a USB connection or laptop for measurements — the plug/unplug cycle is only an artifact of the Windows USB serial driver during development. In battery-powered mode, the firmware boots cleanly on power-up and the button triggers sweeps immediately.
+1. Flash the firmware once (via Scenario 1).
+2. Connect the two electrodes from the watch back-plate to the AD5940's **CE0** (counter/excitation) and **SE0** (sense/working) pins.
+3. Power the board from a 3.7 V LiPo battery.
+4. On boot, the firmware automatically enters **wearable mode**:
+   - An EIS sweep runs immediately on power-up.
+   - After each sweep the firmware **waits** for the configured interval (default 5 minutes), then runs the next sweep, saves to SD card, and transmits via BLE.
+5. On your phone, open the **HELPStat companion app** (source in `Originallibraries/`) or any generic BLE terminal.
+6. Scan for BLE devices and connect to `HELPStat` to receive real-time impedance data.
+7. To change the sweep interval or disable auto-sweep, connect via serial and type:
+   ```
+   INTERVAL:120       — sweep every 2 minutes
+   WEARABLE:OFF       — stop auto-sweep (manual / button only)
+   ```
+
+The board does **not** require a USB connection or laptop for measurements — the plug/unplug cycle is only an artifact of the Windows USB serial driver during development. In battery-powered mode, the firmware boots cleanly on power-up and sweeps begin automatically.
 
 ### Scenario 4 — Automated Data Collection (Python)
 
@@ -226,13 +238,16 @@ All commands are sent over USB serial at **115200 baud**, terminated by a newlin
 | Command | Description |
 |---------|-------------|
 | `HELP` or `?` | List available commands |
-| `STATUS` | Show whether a measurement is queued |
+| `STATUS` | Show measurement queue and wearable timer status |
 | `SHOW` | Print current configuration parameters |
 | `CHECK` | Read the AD5940 chip ID to verify SPI connectivity |
 | `MEASURE` | Start measurement with current parameters |
 | `MEASURE:SAMPLE` | Run default EIS sweep (1 Hz – 200 kHz) |
 | `MEASURE:<14 params>` | Start measurement with inline parameters |
 | `SET:<14 params>` | Set parameters without starting a measurement |
+| `WEARABLE:ON` | Enable automatic periodic EIS sweeps (default) |
+| `WEARABLE:OFF` | Disable auto-sweep; manual / button triggers only |
+| `INTERVAL:N` | Set auto-sweep interval to N seconds (min 10, default 300) |
 
 ### Parameter Format (14 values, comma-separated)
 
@@ -279,6 +294,7 @@ SET:0,100,50000,20,0,0,1000,1,1,127000,150,0,0,150
 | `eis_example.py` | Sweep with Nyquist + Bode plotting | `--port`, `--times`, `--out` |
 | `replug_and_sweep.py` | Windows USB re-enumeration handler | Edit constants at top of file |
 | `eis_csv_to_xlsx.py` | Convert SD card CSV to Excel | `--in`, `--out` |
+| `plot_eis_from_file.py` | Nyquist + Bode from saved CSV or `.xlsx` | `--input`, `--output`, `--title` |
 
 ### Python Dependencies
 
@@ -293,6 +309,52 @@ Install all at once:
 ```bash
 pip install -r requirements.txt
 ```
+
+---
+
+## Analyzing EIS Data (Nyquist and Bode)
+
+After a sweep, the firmware prints a CSV block between `=== EIS DATA CSV ===` and `=== END CSV ===`. The header is:
+
+`Frequency(Hz),Real(Ohm),Imaginary(Ohm),Magnitude(Ohm),Phase(Degrees)`
+
+SD card files (under `/eis/`) use a similar layout with columns such as `Freq`, `Real`, and `Imag`. You can convert SD CSV to Excel with `eis_csv_to_xlsx.py` if you prefer working in a spreadsheet.
+
+### Prepare your file
+
+1. **From serial:** Copy only the data rows (including the header line) into a new `.csv` file. Remove banner lines such as `=== EIS DATA CSV ===` so the **first line** is the column header and every following line is one frequency point.
+2. **From Excel:** Put frequency, real impedance, and imaginary impedance in columns whose names contain `Frequency`/`Freq`, `Real`, and `Imaginary`/`Imag` (the script matches these flexibly).
+3. **Invalid points:** Open-circuit or failed measurements often appear as `inf` or `nan`. The plotting script **drops** non-finite values automatically so the rest of the sweep still plots.
+
+### Generate Nyquist and Bode plots
+
+From the project folder (with `pip install -r requirements.txt` already done):
+
+```bash
+python plot_eis_from_file.py --input your_sweep.csv
+```
+
+Save a PNG without relying on an interactive window:
+
+```bash
+python plot_eis_from_file.py --input your_sweep.xlsx --output nyquist_bode.png --no-show
+```
+
+Optional title on the figure:
+
+```bash
+python plot_eis_from_file.py -i sweep.csv --title "Sweat sensor — trial 1"
+```
+
+### How to read the plots
+
+| Plot | Axes | Typical interpretation |
+|------|------|-------------------------|
+| **Nyquist** | Horizontal: real part of impedance Z′ (Ω). Vertical: **minus** imaginary part −Z″ (Ω). | A **semicircle** often indicates charge-transfer resistance (diameter related to Rct) and double-layer capacitance. The **left** intercept with the real axis is often related to **solution resistance** Rs. A **Warburg** (45° line) at low frequency indicates diffusion. |
+| **Bode (magnitude)** | Frequency (log scale) vs \|Z\| (Ω). | Shows how total impedance changes with frequency; capacitive regions often show falling magnitude with frequency. |
+| **Bode (phase)** | Frequency (log scale) vs phase (degrees). | Near **0°** behaves resistively; toward **−90°** behaves capacitively. |
+
+These shapes depend on your chemistry (electrolyte, electrode materials, and whether a redox reaction is fast or slow). Compare sweeps taken under the same settings (amplitude, bias, temperature) to see changes from sweat composition or binding events.
 
 ---
 
@@ -366,6 +428,8 @@ The firmware incorporates several corrections and optimizations derived from the
 | **DFT delay calculation** | Fixed a zero-delay bug where `_waitClcks * (1/SYSCLCK)` evaluated to 0 due to integer division; now uses proper floating-point conversion. |
 | **Settling delay** | Replaced flat 1-second delay with frequency-proportional timing (4 excitation periods, bounded 5 ms – 10 s), significantly speeding up mid- and high-frequency sweeps. |
 | **Dynamic CTIA selection** | HSTIA feedback capacitance is now computed from the RTIA value and measurement frequency to maintain adequate TIA bandwidth (>=10x excitation frequency). |
+| **2-electrode mode** | Switch matrix Pswitch changed from `SWP_RE0` (dedicated reference electrode) to `SWP_CE0` (sense at counter electrode) across all measurement paths, enabling a simple 2-electrode cell suitable for wearable sweat sensors. |
+| **Wearable auto-sweep** | `loop()` includes a configurable timer that auto-triggers EIS sweeps and waits between measurements (USB-friendly; no light sleep on USB-Serial/JTAG). |
 
 ---
 

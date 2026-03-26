@@ -34,6 +34,7 @@
 #include <vector>
 #include <string>
 #include "esp_task_wdt.h"
+#include "esp_sleep.h"
 
 // Forward declaration for MeasurementMode enum (defined in HELPStat.h)
 // The enum is already included via HELPStat.h
@@ -102,6 +103,12 @@ String fileName = "sweep_1Hz_200kHz";
 String serialInput = "";
 bool measurementRequested = false;
 
+// Wearable / standalone auto-sweep settings
+bool wearableMode = true;
+unsigned long sweepIntervalSec = 300;   // seconds between auto-sweeps (default 5 min)
+unsigned long lastSweepMs = 0;
+bool firstBoot = true;
+
 void parseSerialCommand() {
   if (Serial.available() > 0) {
     String command = Serial.readStringUntil('\n');
@@ -117,6 +124,10 @@ void parseSerialCommand() {
       Serial.println("MEASURE:mode,startFreq,endFreq,numPoints,biasVolt,zeroVolt,rcalVal,extGain,dacGain,rct_est,rs_est,numCycles,delaySecs,amplitude");
       Serial.println("SET:mode,startFreq,endFreq,numPoints,biasVolt,zeroVolt,rcalVal,extGain,dacGain,rct_est,rs_est,numCycles,delaySecs,amplitude");
       Serial.println("MEASURE:SAMPLE or MEASURE:DEFAULT - run built-in 1Hz-200kHz EIS sweep");
+      Serial.println("\nWearable / Standalone:");
+      Serial.println("  WEARABLE:ON  - enable auto-sweep timer (default ON)");
+      Serial.println("  WEARABLE:OFF - disable auto-sweep, manual only");
+      Serial.println("  INTERVAL:N   - set auto-sweep interval to N seconds (default 300)");
       Serial.println("\nMeasurement Modes:");
       Serial.println("  0 = EIS (Electrochemical Impedance Spectroscopy)");
       Serial.println("  1 = CV (Cyclic Voltammetry)");
@@ -155,7 +166,46 @@ void parseSerialCommand() {
       Serial.println("\n=== STATUS ===");
       Serial.print("Measurement Requested: ");
       Serial.println(measurementRequested ? "YES" : "NO");
+      Serial.print("Wearable auto-sweep: ");
+      Serial.println(wearableMode ? "ON" : "OFF");
+      Serial.print("Sweep interval: ");
+      Serial.print(sweepIntervalSec);
+      Serial.println(" s");
+      unsigned long elapsed = (millis() - lastSweepMs) / 1000;
+      Serial.print("Time since last sweep: ");
+      Serial.print(elapsed);
+      Serial.println(" s");
       Serial.println("================\n");
+      return;
+    }
+
+    // WEARABLE:ON / WEARABLE:OFF
+    if (command.startsWith("WEARABLE:")) {
+      String val = command.substring(9);
+      if (val == "ON") {
+        wearableMode = true;
+        lastSweepMs = millis();
+        Serial.println("Wearable auto-sweep ENABLED");
+      } else if (val == "OFF") {
+        wearableMode = false;
+        Serial.println("Wearable auto-sweep DISABLED (manual only)");
+      } else {
+        Serial.println("Usage: WEARABLE:ON or WEARABLE:OFF");
+      }
+      return;
+    }
+
+    // INTERVAL:N  (seconds)
+    if (command.startsWith("INTERVAL:")) {
+      unsigned long sec = command.substring(9).toInt();
+      if (sec >= 10) {
+        sweepIntervalSec = sec;
+        Serial.print("Auto-sweep interval set to ");
+        Serial.print(sec);
+        Serial.println(" seconds");
+      } else {
+        Serial.println("Minimum interval is 10 seconds.");
+      }
       return;
     }
 
@@ -351,7 +401,8 @@ void setup() {
   delay(1000);
   
   Serial.println("\n=== HELPStat EIS Measurement System ===");
-  Serial.println("Type HELP for available commands");
+  Serial.println("Mode: 2-electrode wearable (auto-sweep ON)");
+  Serial.println("Type HELP for commands, WEARABLE:OFF to disable auto-sweep");
   Serial.println("=======================================\n");
   
   demo.BLE_setup();
@@ -409,15 +460,12 @@ void setup() {
 }
 
 void loop() {
-  // Check for serial commands
   parseSerialCommand();
-  
-  
-  // physical button can also trigger default/sample sweep
-  if(digitalRead(BUTTON) == LOW && !measurementRequested) {
-    // debounce simple
+
+  // Physical button can also trigger a sweep
+  if (digitalRead(BUTTON) == LOW && !measurementRequested) {
     delay(50);
-    if(digitalRead(BUTTON) == LOW) {
+    if (digitalRead(BUTTON) == LOW) {
       Serial.println("Button pressed; starting default sample EIS");
       demo.setParameters(
         MODE_EIS, 200000.0, 1.0, 10, 0.0, 0.0, 1000.0, 1, 1, 127000.0, 150.0, 0, 0, 200.0);
@@ -425,78 +473,74 @@ void loop() {
     }
   }
 
-  // Check if measurement was requested via serial
+  // Auto-trigger: on first boot or when the interval has elapsed
+  if (wearableMode && !measurementRequested) {
+    unsigned long now = millis();
+    if (firstBoot || (now - lastSweepMs >= sweepIntervalSec * 1000UL)) {
+      firstBoot = false;
+      Serial.println("[WEARABLE] Auto-triggering EIS sweep...");
+      demo.setParameters(
+        MODE_EIS, 200000.0, 1.0, 10, 0.0, 0.0, 1000.0, 1, 1, 127000.0, 150.0, 0, 0, 200.0);
+      measurementRequested = true;
+    }
+  }
+
   if (measurementRequested) {
     measurementRequested = false;
     digitalWrite(LEDPIN, LOW);
-    
+
     Serial.println("\n=== Starting Measurement ===");
     demo.print_settings();
     Serial.println("============================\n");
-    
-    // Get measurement mode and route to appropriate function
+
     MeasurementMode mode = demo.getMeasurementMode();
-    
-    switch(mode) {
+
+    switch (mode) {
       case MODE_EIS:
-        // Configure AD5940 with current parameters
         demo.AD5940_TDD(test, gainSize);
-        
-        // Run the frequency sweep
+
         Serial.println("Running frequency sweep...");
         demo.runSweep();
-        
-        // Calculate equivalent circuit parameters
+
         Serial.println("\nCalculating Rct and Rs...");
         demo.calculateResistors();
-        
-        // Output results as CSV to serial monitor
+
         Serial.println("\n=== Measurement Complete ===");
         demo.printDataCSV();
-        
-        // Also transmit via BLE if connected
+
         demo.BLE_transmitResults();
-        
-        // Save to SD card (optional)
         demo.saveDataEIS();
         break;
-        
-      case MODE_CV:
-        demo.runCV();
-        break;
-        
-      case MODE_IT:
-        demo.runIT();
-        break;
-        
-      case MODE_CP:
-        demo.runCP();
-        break;
-        
-      case MODE_DPV:
-        demo.runDPV();
-        break;
-        
-      case MODE_SWV:
-        demo.runSWV();
-        break;
-        
-      case MODE_OCP:
-        demo.runOCP();
-        break;
-        
+
+      case MODE_CV:  demo.runCV();  break;
+      case MODE_IT:  demo.runIT();  break;
+      case MODE_CP:  demo.runCP();  break;
+      case MODE_DPV: demo.runDPV(); break;
+      case MODE_SWV: demo.runSWV(); break;
+      case MODE_OCP: demo.runOCP(); break;
       default:
         Serial.println("ERROR: Unknown measurement mode!");
         break;
     }
-    
-    // Reset LED
+
+    lastSweepMs = millis();
     delay(500);
     blinkLED(0, 1);
-    Serial.println("\nReady for next measurement. Type MEASURE to run again.\n");
+    Serial.println("\nReady for next measurement.\n");
+
+    // In wearable mode, wait until the next sweep interval.
+    // Uses a polling loop instead of light sleep so the USB-Serial/JTAG
+    // interface stays alive for development. The RTOS idle task still
+    // reduces power when nothing is happening.
+    if (wearableMode && sweepIntervalSec >= 10) {
+      Serial.print("[WEARABLE] Next sweep in ");
+      Serial.print(sweepIntervalSec);
+      Serial.println(" s (send any command or press button to interact)...");
+      Serial.flush();
+    }
   }
-  
-  delay(10); // Small delay to prevent CPU spinning
+
+  delay(10);
 }
 
 void blinkLED(int cycles, bool state) {
