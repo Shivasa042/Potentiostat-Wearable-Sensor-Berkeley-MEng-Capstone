@@ -7,7 +7,7 @@ captures all of the CSV lines that the firmware prints.  When the sweep
 is complete the data are parsed and displayed with Nyquist and Bode plots.
 
 Usage example:
-    python eis_example.py --port COM3
+    python testing/eis_example.py --port COM3
 
 Dependencies (also listed in requirements.txt):
     pip install pyserial numpy matplotlib

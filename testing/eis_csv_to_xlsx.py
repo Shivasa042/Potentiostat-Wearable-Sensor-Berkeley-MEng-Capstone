@@ -9,7 +9,7 @@ It may also include repeated header lines and a trailing comma after Imag.
 This script extracts numeric rows and exports them to an .xlsx.
 
 Usage:
-  py -3 eis_csv_to_xlsx.py --in path/to/file.csv --out path/to/file.xlsx
+  py -3 testing/eis_csv_to_xlsx.py --in path/to/file.csv --out path/to/file.xlsx
 """
 
 from __future__ import annotations

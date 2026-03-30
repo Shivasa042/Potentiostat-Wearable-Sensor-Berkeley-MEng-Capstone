@@ -11,8 +11,8 @@ until:
   "=== END CSV ==="
 
 Example:
-  py -3 send_eis_sample.py --port COM3
-  py -3 send_eis_sample.py --port COM3 --out eis_sample.csv
+  py -3 testing/send_eis_sample.py --port COM3
+  py -3 testing/send_eis_sample.py --port COM3 --out eis_sample.csv
 """
 
 from __future__ import annotations

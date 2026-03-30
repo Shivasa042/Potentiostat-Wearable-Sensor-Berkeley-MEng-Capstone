@@ -10,8 +10,8 @@ Supports:
   - Minimal export: Frequency,Real,Imag  (or Freq, Real, Imag)
 
 Usage:
-  python plot_eis_from_file.py --input sweep.csv
-  python plot_eis_from_file.py --input results.xlsx --output nyquist_bode.png
+  python testing/plot_eis_from_file.py --input sweep.csv
+  python testing/plot_eis_from_file.py --input results.xlsx --output nyquist_bode.png
 
 Dependencies: numpy, matplotlib; for .xlsx also openpyxl (see requirements.txt)
 """

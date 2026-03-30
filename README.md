@@ -87,16 +87,20 @@ The system supports seven measurement modes (EIS is fully implemented; others ar
 │   ├── NEW_FEATURES.md        # Implemented features (validation, averaging, etc.)
 │   └── IMPROVEMENTS.md        # Roadmap of AD5940 improvements from datasheet analysis
 ├── Originallibraries/         # Reference copy of the original HELPStat Android app and library
-├── replug_and_sweep.py        # One-shot USB sweep script (Windows, handles USB re-enumeration)
-├── eis_sweep.py               # Clean EIS sweep script with Excel output
-├── send_eis_sample.py         # CLI tool with --port, --start-hz, --end-hz, --out options
-├── eis_csv_to_xlsx.py         # Convert SD card CSV to Excel
-├── eis_example.py             # Example: sweep + Nyquist/Bode plotting
-├── plot_eis_from_file.py      # Nyquist + Bode from saved CSV or Excel
+├── testing/                   # USB/serial capture, conversion, and plotting scripts
+│   ├── eis_sweep.py           # Clean EIS sweep script with Excel output
+│   ├── send_eis_sample.py     # CLI tool with --port, --start-hz, --end-hz, --out options
+│   ├── eis_example.py         # Example: sweep + Nyquist/Bode plotting
+│   ├── replug_and_sweep.py    # One-shot USB sweep (Windows, handles USB re-enumeration)
+│   ├── eis_csv_to_xlsx.py     # Convert SD card CSV to Excel
+│   ├── plot_eis_from_file.py  # Nyquist + Bode from saved CSV or Excel
+│   └── sample_plots/          # Example figures (Nyquist, Bode, DFT impedance) from prior sweeps
 ├── platformio.ini             # PlatformIO build configuration
-├── requirements.txt           # Python dependencies
+├── requirements.txt           # Python dependencies (used by testing/ scripts)
 └── README.md                  # This file
 ```
+
+The files under `testing/sample_plots/` (`nyquist.png`, `bode.png`, `dft_impedance_plots.png`) are **example EIS figures** saved from earlier measurement or simulation runs. They illustrate what Nyquist, Bode, and DFT-style impedance plots look like for this system; they are not required to build firmware or run scripts. Regenerate your own plots with `testing/plot_eis_from_file.py` or `testing/eis_example.py` from your CSV or Excel data.
 
 ---
 
@@ -119,6 +123,8 @@ The system supports seven measurement modes (EIS is fully implemented; others ar
 git clone https://github.com/Shivasa042/Potentiostat-Wearable-Sensor.git
 cd Potentiostat-Wearable-Sensor
 ```
+
+If you keep a local copy named **Potentiostat-Wearable-Sensor-Berkeley-MEng-Capstone**, open that folder instead and run all commands from its root (next to `platformio.ini`).
 
 ### Build and Flash the Firmware
 
@@ -172,7 +178,7 @@ Best for: field measurements without any computer.
 6. Results are saved to the SD card at `/eis/sweep_1Hz_200kHz.csv`.
 7. Remove the SD card and convert the CSV to Excel:
    ```bash
-   python eis_csv_to_xlsx.py --in sweep_1Hz_200kHz.csv --out results.xlsx
+   python testing/eis_csv_to_xlsx.py --in sweep_1Hz_200kHz.csv --out results.xlsx
    ```
 
 ### Scenario 3 — Battery-Powered Wearable with BLE (Apple Watch / Smartwatch Sweat Sensor)
@@ -204,7 +210,7 @@ Best for: batch measurements, lab automation, data logging to Excel.
 **Quick sweep with Excel output (Windows):**
 
 ```bash
-python eis_sweep.py
+python testing/eis_sweep.py
 ```
 
 This script auto-detects the ESP32-S3 on USB, sends a sweep command, captures the CSV output, and saves it as `eis_sweep_data.xlsx`.
@@ -212,19 +218,19 @@ This script auto-detects the ESP32-S3 on USB, sends a sweep command, captures th
 **CLI tool with full control:**
 
 ```bash
-python send_eis_sample.py --port COM4 --start-hz 100 --end-hz 50000 --amplitude-mv 150 --out sweep.xlsx
+python testing/send_eis_sample.py --port COM4 --start-hz 100 --end-hz 50000 --amplitude-mv 150 --out sweep.xlsx
 ```
 
 **Multiple sweeps with plotting:**
 
 ```bash
-python eis_example.py --port COM4 --times 5 --out dataset.csv
+python testing/eis_example.py --port COM4 --times 5 --out dataset.csv
 ```
 
 **First-time USB sweep on Windows** (handles the one-time replug):
 
 ```bash
-python replug_and_sweep.py
+python testing/replug_and_sweep.py
 ```
 
 Follow the on-screen prompts to unplug and replug the USB cable. Data is saved to `eis_sweep_data.xlsx`.
@@ -289,12 +295,12 @@ SET:0,100,50000,20,0,0,1000,1,1,127000,150,0,0,150
 
 | Script | Purpose | Key Options |
 |--------|---------|-------------|
-| `eis_sweep.py` | Auto-detect board, sweep, save to Excel | Edit constants at top of file |
-| `send_eis_sample.py` | Full CLI tool for custom sweeps | `--port`, `--start-hz`, `--end-hz`, `--amplitude-mv`, `--out` |
-| `eis_example.py` | Sweep with Nyquist + Bode plotting | `--port`, `--times`, `--out` |
-| `replug_and_sweep.py` | Windows USB re-enumeration handler | Edit constants at top of file |
-| `eis_csv_to_xlsx.py` | Convert SD card CSV to Excel | `--in`, `--out` |
-| `plot_eis_from_file.py` | Nyquist + Bode from saved CSV or `.xlsx` | `--input`, `--output`, `--title` |
+| `testing/eis_sweep.py` | Auto-detect board, sweep, save to Excel | Edit constants at top of file |
+| `testing/send_eis_sample.py` | Full CLI tool for custom sweeps | `--port`, `--start-hz`, `--end-hz`, `--amplitude-mv`, `--out` |
+| `testing/eis_example.py` | Sweep with Nyquist + Bode plotting | `--port`, `--times`, `--out` |
+| `testing/replug_and_sweep.py` | Windows USB re-enumeration handler | Edit constants at top of file |
+| `testing/eis_csv_to_xlsx.py` | Convert SD card CSV to Excel | `--in`, `--out` |
+| `testing/plot_eis_from_file.py` | Nyquist + Bode from saved CSV or `.xlsx` | `--input`, `--output`, `--title` |
 
 ### Python Dependencies
 
@@ -318,7 +324,7 @@ After a sweep, the firmware prints a CSV block between `=== EIS DATA CSV ===` an
 
 `Frequency(Hz),Real(Ohm),Imaginary(Ohm),Magnitude(Ohm),Phase(Degrees)`
 
-SD card files (under `/eis/`) use a similar layout with columns such as `Freq`, `Real`, and `Imag`. You can convert SD CSV to Excel with `eis_csv_to_xlsx.py` if you prefer working in a spreadsheet.
+SD card files (under `/eis/`) use a similar layout with columns such as `Freq`, `Real`, and `Imag`. You can convert SD CSV to Excel with `testing/eis_csv_to_xlsx.py` if you prefer working in a spreadsheet.
 
 ### Prepare your file
 
@@ -331,19 +337,19 @@ SD card files (under `/eis/`) use a similar layout with columns such as `Freq`, 
 From the project folder (with `pip install -r requirements.txt` already done):
 
 ```bash
-python plot_eis_from_file.py --input your_sweep.csv
+python testing/plot_eis_from_file.py --input your_sweep.csv
 ```
 
 Save a PNG without relying on an interactive window:
 
 ```bash
-python plot_eis_from_file.py --input your_sweep.xlsx --output nyquist_bode.png --no-show
+python testing/plot_eis_from_file.py --input your_sweep.xlsx --output nyquist_bode.png --no-show
 ```
 
 Optional title on the figure:
 
 ```bash
-python plot_eis_from_file.py -i sweep.csv --title "Sweat sensor — trial 1"
+python testing/plot_eis_from_file.py -i sweep.csv --title "Sweat sensor — trial 1"
 ```
 
 ### How to read the plots
