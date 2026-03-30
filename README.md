@@ -120,8 +120,8 @@ The files under `testing/sample_plots/` (`nyquist.png`, `bode.png`, `dft_impedan
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/Shivasa042/Potentiostat-Wearable-Sensor.git
-cd Potentiostat-Wearable-Sensor
+git clone https://github.com/Shivasa042/Potentiostat-Wearable-Sensor-Berkeley-MEng-Capstone.git
+cd Potentiostat-Wearable-Sensor-Berkeley-MEng-Capstone
 ```
 
 If you keep a local copy named **Potentiostat-Wearable-Sensor-Berkeley-MEng-Capstone**, open that folder instead and run all commands from its root (next to `platformio.ini`).
