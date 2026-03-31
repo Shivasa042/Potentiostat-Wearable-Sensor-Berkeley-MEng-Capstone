@@ -66,6 +66,10 @@ def main() -> int:
     ser = serial.Serial(port=port, baudrate=115200, timeout=2, write_timeout=2)
     time.sleep(0.4)
     ser.reset_input_buffer()
+    # Stops timed auto-sweeps when the firmware is idle (parsed each loop iteration).
+    ser.write(b"WEARABLE:OFF\n")
+    time.sleep(0.25)
+    ser.reset_input_buffer()
     print("Sending:", cmd.strip())
     ser.write(cmd.encode("utf-8"))
 
