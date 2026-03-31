@@ -221,25 +221,48 @@ Best for: field measurements without any computer.
 
 ### Scenario 3 — Battery-Powered Wearable with BLE (Apple Watch / Smartwatch Sweat Sensor)
 
-Best for: continuous autonomous sweat monitoring with a 2-electrode sensor.
+Best for: **continuous autonomous sweat monitoring** with a 2-electrode sensor.
 
-The board is designed to operate standalone — no USB cable or laptop required at runtime.
+The board is designed to operate standalone — no USB cable or laptop required at runtime (USB is optional for power, logging, or one-time setup).
+
+#### Hardware setup
 
 1. Flash the firmware once (via Scenario 1).
 2. Connect the two electrodes from the watch back-plate to the AD5940's **CE0** (counter/excitation) and **SE0** (sense/working) pins.
-3. Power the board from a 3.7 V LiPo battery.
-4. For field use, enable **wearable mode** over serial (`WEARABLE:ON`). USB/bench builds default to **auto-sweep OFF** so lab scripts can run short sweeps without waiting out a full 200 kHz→1 Hz run first.
-   - With wearable mode on, an EIS sweep runs on the boot/interval schedule.
-   - After each sweep the firmware **waits** for the configured interval (default 5 minutes), then runs the next sweep, saves to SD card, and transmits via BLE.
-5. On a **phone or laptop**, use the **web companion** ([`web/helpstat-app`](#companion-web-app-webhelpstat-app)) in **Chrome** or **Edge** (Web Bluetooth), the **native iOS app** ([`ios/HELPStatCompanion`](#native-ios-app-ioshelpstatcompanion)) on iPhone, or any generic BLE terminal.
-6. Connect to the device named **`HELPStat`**. History and plots are stored **per Pacific calendar day** in the web app (and optionally in the legacy Android build under `Originallibraries/`).
-7. To change the sweep interval or disable auto-sweep, connect via serial and type:
-   ```
-   INTERVAL:120       — sweep every 2 minutes
-   WEARABLE:OFF       — stop auto-sweep (manual / button only)
-   ```
+3. Power the board from a **3.7 V LiPo** (field) or **USB** (bench / development). Insert a **FAT32 microSD card** if you want on-device CSV storage (optional; see below).
 
-The board does **not** require a USB connection or laptop for measurements — the plug/unplug cycle is only an artifact of the Windows USB serial driver during development. In battery-powered mode, send **`WEARABLE:ON`** once (or build with that default) if you want sweeps to start automatically on the timer.
+#### Turning on continuous (timed) sweeps
+
+Firmware **defaults to `WEARABLE:OFF`** on USB/bench builds so lab scripts are not blocked by a long auto-sweep. For Scenario 3, you must **enable wearable mode** once per power session:
+
+| Action | How |
+|--------|-----|
+| Enable timed sweeps | Serial: **`WEARABLE:ON`** (115200 baud, newline-terminated), or run **`py -3 testing/board_status_wearable.py COM4`** from the repo. |
+| Check state | **`STATUS`** — shows *Wearable auto-sweep: ON/OFF*, **sweep interval** (seconds), and time since last sweep. |
+| Change how often sweeps run | **`INTERVAL:N`** with **N ≥ 10** (default **300** = 5 minutes). Example: **`INTERVAL:120`** = every 2 minutes. |
+| Stop auto-sweeps | **`WEARABLE:OFF`** — manual sweeps only (button / **`MEASURE`**). |
+
+**Persistence:** **`WEARABLE:ON` / `OFF` and `INTERVAL` live in RAM.** After **power-cycle** or **reflash**, wearable is **OFF** again until you send **`WEARABLE:ON`**. To make “always on” permanent, change the firmware default (`wearableMode` in `src/main.cpp`) or re-enable over serial at each boot.
+
+**First sweep after `WEARABLE:ON`:** If **`firstBoot`** is still true (wearable had not yet armed a sweep this boot), the firmware may start the **default full EIS sweep (200 kHz → 1 Hz)** **immediately**. Otherwise the next sweep is scheduled from the **interval timer** (and sending **`WEARABLE:ON`** resets the internal “last sweep” clock—expect up to one full **INTERVAL** wait before the next run in that case). Each full sweep can take **many minutes**.
+
+#### How you get data when continuous sweeps are running
+
+After **each** sweep completes, the firmware (see `src/main.cpp` → `printDataCSV`, `BLE_transmitResults`, `saveDataEIS`) outputs data on **three paths**. You can use **one or more** at the same time (e.g. BLE to phone + USB logging on a laptop).
+
+| Path | What happens | Practical notes |
+|------|----------------|-------------------|
+| **USB serial (115200)** | Prints **`=== EIS DATA CSV ===` … `=== END CSV ===`** with columns **`Frequency(Hz),Real(Ohm),Imaginary(Ohm),Magnitude(Ohm),Phase(Degrees)`** plus calculated **Rct/Rs** block. | Works whenever USB is connected. Leave a terminal open or run a **logger** that reads COM and **appends** each CSV block to a file. **While `runSweep()` is active**, new serial **commands** are not parsed; the CSV still appears **after** each sweep finishes. |
+| **Bluetooth Low Energy** | **`BLE_transmitResults()`** notifies **Rct**, **Rs**, then **per-point** frequency, real, imag, phase (deg), magnitude. | Use the **web companion** ([`web/helpstat-app`](#companion-web-app-webhelpstat-app)) in **Chrome** or **Edge** (Web Bluetooth), or the **native iOS app** ([`ios/HELPStatCompanion`](#native-ios-app-ioshelpstatcompanion)). Connect to **`HELPStat`**. The web app stores history **per Pacific calendar day** (IndexedDB); you can **export/import JSON**. iPhone must use the **native app** for live BLE (no Web Bluetooth in Safari). |
+| **microSD card** | **`saveDataEIS()`** writes **`/<folder>/<file>.csv`** (defaults are along the lines of **`eis`** / **`sweep_1Hz_200kHz`**). | Requires a **mounted** card. The **same path** is used each time, so **`FILE_WRITE` may overwrite** the previous file rather than keeping a long archive—treat SD as **“latest sweep on card”** unless you change folder/file (e.g. via BLE characteristics) or extend firmware to use **timestamped filenames**. |
+
+#### Companions and legacy tools
+
+- **Web (desktop/Android Chrome/Edge):** [`web/helpstat-app`](#companion-web-app-webhelpstat-app) — Live + History + export.
+- **iOS:** [`ios/HELPStatCompanion`](#native-ios-app-ioshelpstatcompanion) — same idea natively.
+- **Legacy Android:** optional Kotlin tree under `Originallibraries/`.
+
+The board does **not** require USB for measurements in the field; USB is mainly for development, power, or **serial logging** when tethered.
 
 ### Scenario 4 — Automated Data Collection (Python)
 
