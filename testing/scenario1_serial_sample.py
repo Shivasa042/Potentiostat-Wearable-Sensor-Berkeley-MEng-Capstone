@@ -3,8 +3,15 @@
 Scenario 1 (laptop + USB serial): send MEASURE over 115200 baud and capture
 === EIS DATA CSV === ... === END CSV === from firmware.
 
-Uses a narrower band and fewer points per decade for a faster sample sweep.
-Override port:  py -3 testing/scenario1_serial_sample.py COM4
+Default is a quick multi-point band. Pass a frequency (Hz) as the second argument
+to request a single-frequency sample. The firmware maps (start,end,numPoints) to
+SweepPoints via a log formula; start==end yields 0 points, so single-frequency
+mode uses start and end=start*1.035 with numPoints=100 so SweepPoints==1 (first
+measurement is at start).
+
+Examples:
+  py -3 testing/scenario1_serial_sample.py COM4
+  py -3 testing/scenario1_serial_sample.py COM4 10000
 """
 from __future__ import annotations
 
@@ -22,16 +29,38 @@ def find_esp_port() -> str | None:
     return None
 
 
+def measure_cmd_single_frequency(f_hz: float) -> str:
+    start = float(f_hz)
+    end = start * 1.035
+    # numPoints=100 with ~3.5% span gives log10 ratio * 100 ≈ 1.5 → SweepPoints == 1
+    return (
+        f"MEASURE:0,{start:g},{end:g},100,0.0,0.0,100.0,1,1,127000.0,150.0,0,0,200\n"
+    )
+
+
 def main() -> int:
-    port = sys.argv[1] if len(sys.argv) > 1 else find_esp_port()
+    argv = list(sys.argv[1:])
+    single_hz: float | None = None
+    if argv:
+        try:
+            single_hz = float(argv[-1])
+            argv.pop()
+        except ValueError:
+            pass
+    port = argv[0] if argv else find_esp_port()
     if not port:
         print("No ESP32-S3 (VID 303A) found. Plug in the board or pass COM port.", file=sys.stderr)
         return 1
 
-    # Quick sample: 10 kHz down to 100 Hz, 2 points/decade, 200 mV (matches firmware style)
-    cmd = (
-        "MEASURE:0,10000,100,2,0.0,0.0,1000.0,1,1,127000.0,150.0,0,0,200\n"
-    )
+    if single_hz is not None:
+        cmd = measure_cmd_single_frequency(single_hz)
+        out_name = "scenario1_eis_sample_single.csv"
+    else:
+        # Quick sample: 10 kHz down to 100 Hz, 2 points/decade, 200 mV
+        cmd = (
+            "MEASURE:0,10000,100,2,0.0,0.0,100.0,1,1,127000.0,150.0,0,0,200\n"
+        )
+        out_name = "scenario1_eis_sample.csv"
 
     print(f"Opening {port} @ 115200 …")
     ser = serial.Serial(port=port, baudrate=115200, timeout=2, write_timeout=2)
@@ -40,7 +69,6 @@ def main() -> int:
     print("Sending:", cmd.strip())
     ser.write(cmd.encode("utf-8"))
 
-    out_name = "scenario1_eis_sample.csv"
     capturing = False
     lines: list[str] = []
     deadline = time.time() + 420.0

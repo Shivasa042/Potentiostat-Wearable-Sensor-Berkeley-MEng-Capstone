@@ -65,6 +65,7 @@ The system supports seven measurement modes (EIS is fully implemented; others ar
 | **User Input** | Physical push-button on GPIO 7 |
 | **Indicator** | LED on GPIO 6 |
 | **Power** | USB-C or 3.7 V LiPo battery |
+| **RCAL** | On-board calibration resistor (nominal **100 Ω**, typical bands brown–black–brown, gold ±5%); set `rcalVal` in commands to the **measured** value |
 
 ---
 
@@ -169,7 +170,7 @@ Best for: development, debugging, and quick characterization.
    ```
    HELP                    — list all commands
    MEASURE:SAMPLE          — run default 1 Hz – 200 kHz sweep
-   MEASURE:0,200000,1,10,0,0,1000,1,1,127000,150,0,0,200   — custom sweep
+   MEASURE:0,200000,1,10,0,0,100,1,1,127000,150,0,0,200   — custom sweep (rcal = on-board RCAL, nominal 100 Ω)
    ```
 3. CSV data prints to the terminal. Copy-paste into a spreadsheet or use the Python scripts below.
 
@@ -334,9 +335,9 @@ A legacy 12-parameter format (without mode and amplitude) is also supported for 
 
 ```
 MEASURE:SAMPLE
-MEASURE:0,200000,1,10,0,0,1000,1,1,127000,150,0,0,200
-MEASURE:0,200000,100,5,0,0,1000,1,1,127000,150,0,0,100
-SET:0,100,50000,20,0,0,1000,1,1,127000,150,0,0,150
+MEASURE:0,200000,1,10,0,0,100,1,1,127000,150,0,0,200
+MEASURE:0,200000,100,5,0,0,100,1,1,127000,150,0,0,100
+SET:0,100,50000,20,0,0,100,1,1,127000,150,0,0,150
 ```
 
 ---

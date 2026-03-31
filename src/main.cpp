@@ -83,7 +83,7 @@ float startFreq = 200000;
 float endFreq = 1;
 float biasVolt = 0.0; 
 float zeroVolt = 0.0; 
-float rcalVal = 1000; // Use the measured resistance of the chosen calibration resistor
+float rcalVal = 100.0f; // On-board RCAL (nominal 100 Ω: brown-black-brown, gold ±5%); measure with DMM for best accuracy
 
 int extGain = 1; 
 int dacGain = 1; 
@@ -152,8 +152,8 @@ void parseSerialCommand() {
       Serial.println("  delaySecs: Delay between cycles (seconds)");
       Serial.println("  amplitude: Signal amplitude (mV, 0-800)");
       Serial.println("\nExamples:");
-      Serial.println("  EIS: MEASURE:0,200000,1,10,0,0,1000,1,1,127000,150,0,0,200");
-      Serial.println("  CV:  MEASURE:1,0,0,100,0.0,1.0,1000,1,1,0,0,1,0,50");
+      Serial.println("  EIS: MEASURE:0,200000,1,10,0,0,100,1,1,127000,150,0,0,200");
+      Serial.println("  CV:  MEASURE:1,0,0,100,0.0,1.0,100,1,1,0,0,1,0,50");
       Serial.println("SHOW - Display current settings");
       Serial.println("STATUS - Show measurement status");
       Serial.println("HELP - Show this help message");
@@ -309,7 +309,7 @@ void parseSerialCommand() {
         10,                // points per decade
         0.0,               // bias
         0.0,               // zero volt
-        1000.0,            // rcal
+        100.0,             // rcal (100 Ω on-board RCAL)
         1,                 // extGain
         1,                 // dacGain
         127000.0,          // rct_est
@@ -468,7 +468,7 @@ void loop() {
     if (digitalRead(BUTTON) == LOW) {
       Serial.println("Button pressed; starting default sample EIS");
       demo.setParameters(
-        MODE_EIS, 200000.0, 1.0, 10, 0.0, 0.0, 1000.0, 1, 1, 127000.0, 150.0, 0, 0, 200.0);
+        MODE_EIS, 200000.0, 1.0, 10, 0.0, 0.0, 100.0, 1, 1, 127000.0, 150.0, 0, 0, 200.0);
       measurementRequested = true;
     }
   }
@@ -480,7 +480,7 @@ void loop() {
       firstBoot = false;
       Serial.println("[WEARABLE] Auto-triggering EIS sweep...");
       demo.setParameters(
-        MODE_EIS, 200000.0, 1.0, 10, 0.0, 0.0, 1000.0, 1, 1, 127000.0, 150.0, 0, 0, 200.0);
+        MODE_EIS, 200000.0, 1.0, 10, 0.0, 0.0, 100.0, 1, 1, 127000.0, 150.0, 0, 0, 200.0);
       measurementRequested = true;
     }
   }

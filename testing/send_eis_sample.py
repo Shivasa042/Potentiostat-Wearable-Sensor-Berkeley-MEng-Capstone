@@ -119,7 +119,7 @@ def main() -> None:
             "10,"      # numPoints per decade
             "0.0,"     # biasVolt
             "0.0,"     # zeroVolt
-            "1000.0,"  # rcalVal
+            "100.0,"  # rcalVal (on-board RCAL, nominal 100 Ω)
             "1,"       # extGain
             "1,"       # dacGain
             "127000.0,"# rct_est

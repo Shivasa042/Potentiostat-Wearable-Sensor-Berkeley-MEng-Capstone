@@ -52,58 +52,58 @@ MEASURE:startFreq,endFreq,numPoints,biasVolt,zeroVolt,rcalVal,extGain,dacGain,rc
 
 ### EIS (Electrochemical Impedance Spectroscopy)
 ```
-MEASURE:0,200000,10,5,0,0,1000,1,1,127000,150,0,0,200
+MEASURE:0,200000,10,5,0,0,100,1,1,127000,150,0,0,200
 ```
 - Mode: 0 (EIS)
 - Frequency range: 200kHz to 10Hz
 - 5 points per decade
-- No bias, 1000Ω calibration resistor
+- No bias, 100Ω on-board RCAL (nominal; verify with a DMM)
 - 200mV signal amplitude
 
 ### EIS with Custom Amplitude
 ```
-MEASURE:0,200000,10,5,0,0,1000,1,1,127000,150,0,0,100
+MEASURE:0,200000,10,5,0,0,100,1,1,127000,150,0,0,100
 ```
 - Same as above but with 100mV amplitude
 
 ### CV (Cyclic Voltammetry) - Stub
 ```
-MEASURE:1,0,0,100,0.0,1.0,1000,1,1,0,0,1,0,50
+MEASURE:1,0,0,100,0.0,1.0,100,1,1,0,0,1,0,50
 ```
 - Mode: 1 (CV)
 - Note: CV implementation is currently a stub
 
 ### IT/CA (Chronoamperometry) - Stub
 ```
-MEASURE:2,0,0,100,0.5,0,1000,1,1,0,0,1,0,0
+MEASURE:2,0,0,100,0.5,0,100,1,1,0,0,1,0,0
 ```
 - Mode: 2 (IT/CA)
 - Note: IT/CA implementation is currently a stub
 
 ### CP (Chronopotentiometry) - Stub
 ```
-MEASURE:3,0,0,100,0,0,1000,1,1,0,0,1,0,0
+MEASURE:3,0,0,100,0,0,100,1,1,0,0,1,0,0
 ```
 - Mode: 3 (CP)
 - Note: CP implementation is currently a stub
 
 ### DPV (Differential Pulse Voltammetry) - Stub
 ```
-MEASURE:4,0,0,100,0.0,1.0,1000,1,1,0,0,1,0,25
+MEASURE:4,0,0,100,0.0,1.0,100,1,1,0,0,1,0,25
 ```
 - Mode: 4 (DPV)
 - Note: DPV implementation is currently a stub
 
 ### SWV (Square Wave Voltammetry) - Stub
 ```
-MEASURE:5,0,0,100,0.0,1.0,1000,1,1,0,0,1,0,50
+MEASURE:5,0,0,100,0.0,1.0,100,1,1,0,0,1,0,50
 ```
 - Mode: 5 (SWV)
 - Note: SWV implementation is currently a stub
 
 ### OCP (Open Circuit Potential) - Stub
 ```
-MEASURE:6,0,0,100,0,0,1000,1,1,0,0,10,0,0
+MEASURE:6,0,0,100,0,0,100,1,1,0,0,10,0,0
 ```
 - Mode: 6 (OCP)
 - Note: OCP implementation is currently a stub
@@ -118,7 +118,7 @@ SET:mode,startFreq,endFreq,numPoints,biasVolt,zeroVolt,rcalVal,extGain,dacGain,r
 
 Example:
 ```
-SET:0,200000,10,5,0,0,1000,1,1,127000,150,0,0,200
+SET:0,200000,10,5,0,0,100,1,1,127000,150,0,0,200
 ```
 
 After setting parameters, use `MEASURE` (without parameters) to start measurement with current settings.
