@@ -126,7 +126,7 @@ void parseSerialCommand() {
       Serial.println("SET:mode,startFreq,endFreq,numPoints,biasVolt,zeroVolt,rcalVal,extGain,dacGain,rct_est,rs_est,numCycles,delaySecs,amplitude");
       Serial.println("MEASURE:SAMPLE or MEASURE:DEFAULT - run built-in 1Hz-200kHz EIS sweep");
       Serial.println("\nWearable / Standalone:");
-      Serial.println("  WEARABLE:ON  - enable auto-sweep timer (default ON)");
+      Serial.println("  WEARABLE:ON  - enable auto-sweep timer (Scenario 3 / field)");
       Serial.println("  WEARABLE:OFF - disable auto-sweep, manual only");
       Serial.println("  INTERVAL:N   - set auto-sweep interval to N seconds (default 300)");
       Serial.println("\nMeasurement Modes:");
@@ -229,6 +229,29 @@ void parseSerialCommand() {
       return;
     }
     
+    // MEASURE:SAMPLE must run before startsWith("MEASURE") or it is parsed as invalid params.
+    if (command == "MEASURE:SAMPLE" || command == "MEASURE:DEFAULT") {
+      demo.setParameters(
+        MODE_EIS,          // EIS mode
+        200000.0,          // start frequency 200 kHz
+        1.0,               // end frequency 1 Hz
+        10,                // points per decade
+        0.0,               // bias
+        0.0,               // zero volt
+        100.0,             // rcal (100 Ω on-board RCAL)
+        1,                 // extGain
+        1,                 // dacGain
+        127000.0,          // rct_est
+        150.0,             // rs_est
+        0,                 // numCycles
+        0,                 // delaySecs
+        200.0              // amplitude mV
+      );
+      measurementRequested = true;
+      Serial.println("Default/sample EIS sweep requested (1Hz-200kHz)");
+      return;
+    }
+
     // MEASURE command (full parameter list)
     if (command.startsWith("MEASURE")) {
       if (command.length() > 8) {
@@ -300,30 +323,6 @@ void parseSerialCommand() {
       return;
     }
 
-    // MEASURE:SAMPLE shortcut for a fixed 1 Hz – 40 MHz EIS sweep
-    if (command == "MEASURE:SAMPLE" || command == "MEASURE:DEFAULT") {
-      // configure a standard EIS sweep range with example defaults
-      demo.setParameters(
-        MODE_EIS,          // EIS mode
-        200000.0,          // start frequency 200 kHz
-        1.0,               // end frequency 1 Hz
-        10,                // points per decade
-        0.0,               // bias
-        0.0,               // zero volt
-        100.0,             // rcal (100 Ω on-board RCAL)
-        1,                 // extGain
-        1,                 // dacGain
-        127000.0,          // rct_est
-        150.0,             // rs_est
-        0,                 // numCycles
-        0,                 // delaySecs
-        200.0              // amplitude mV
-      );
-      measurementRequested = true;
-      Serial.println("Default/sample EIS sweep requested (1Hz-200kHz)");
-      return;
-    }
-    
     // SET command (set parameters without measuring)
     if (command.startsWith("SET:")) {
       String params = command.substring(4); // Skip "SET:"
