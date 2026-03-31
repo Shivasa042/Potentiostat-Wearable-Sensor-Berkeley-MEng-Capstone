@@ -42,7 +42,7 @@ def wait_ready(ser: serial.Serial, max_s: float) -> bool:
         if not raw:
             continue
         s = raw.decode("utf-8", errors="replace").rstrip()
-        if s and ("Ready for next measurement" in s or "Wearable auto-sweep DISABLED" in s):
+        if s and "Ready for next measurement" in s:
             print(s)
             return True
         now = time.time()
