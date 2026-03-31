@@ -35,7 +35,7 @@ def measure_cmd_single_frequency(f_hz: float) -> str:
     end = start * 1.035
     # numPoints=100 with ~3.5% span gives log10 ratio * 100 ≈ 1.5 → SweepPoints == 1
     return (
-        f"MEASURE:0,{start:g},{end:g},100,0.0,0.0,100.0,1,1,127000.0,150.0,0,0,200\n"
+        f"MEASURE:0,{start:g},{end:g},100,0.0,0.0,1000.0,1,1,127000.0,150.0,0,0,200\n"
     )
 
 
@@ -59,7 +59,7 @@ def main() -> int:
     else:
         # Minimal sweep: one decade (10 kHz → 1 kHz), 2 points/decade → 2 DFT points only; HF band keeps each step short.
         cmd = (
-            "MEASURE:0,10000,1000,2,0.0,0.0,100.0,1,1,127000.0,150.0,0,0,150\n"
+            "MEASURE:0,10000,1000,2,0.0,0.0,1000.0,1,1,127000.0,150.0,0,0,150\n"
         )
         out_name = "scenario1_eis_sample.csv"
 

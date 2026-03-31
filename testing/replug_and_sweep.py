@@ -74,7 +74,7 @@ except Exception as e:
 # Send EIS command
 P()
 P(f"Sending EIS sweep: {START_HZ} Hz - {END_HZ} Hz, {AMPLITUDE_MV} mV")
-cmd = f"MEASURE:0,{START_HZ},{END_HZ},10,0.0,0.0,100.0,1,1,127000.0,150.0,0,0,{AMPLITUDE_MV}\n"
+cmd = f"MEASURE:0,{START_HZ},{END_HZ},10,0.0,0.0,1000.0,1,1,127000.0,150.0,0,0,{AMPLITUDE_MV}\n"
 try:
     ser.write(cmd.encode("utf-8"))
 except Exception as e:

@@ -13,7 +13,7 @@ All improvements from the AD5940/AD5941 datasheet analysis have been implemented
   - Phase out of range
   - NaN/Inf values
   - Magnitude consistency
-- **Usage**: Automatically called in `AD5940_DFTMeasure()`
+- **Usage**: Called from `AD5940_DFTMeasure()` (with retries) and `AD5940_DFTMeasureWithAveraging()` (only validated samples averaged)
 - **Benefit**: Prevents bad data from corrupting your measurements
 
 ### 2. **Gain Switching with Hysteresis** ⭐ CRITICAL
@@ -35,8 +35,8 @@ All improvements from the AD5940/AD5941 datasheet analysis have been implemented
 ### 4. **Measurement Averaging**
 - **Function**: `AD5940_DFTMeasureWithAveraging(int numAverages)`
 - **What it does**: Performs multiple measurements and averages them
-- **Configuration**: Set `_numAverages` member variable (default: 1)
-- **Usage**: Automatically used in `runSweep()` if `_numAverages > 1`
+- **Configuration**: `_numAverages` in `HELPStat.h` (default: **3**)
+- **Usage**: `runSweep()` always calls `AD5940_DFTMeasureWithAveraging(_numAverages)`
 - **Benefit**: Reduces noise, improves measurement stability
 
 ### 5. **Temperature Reading**
@@ -75,7 +75,7 @@ All improvements from the AD5940/AD5941 datasheet analysis have been implemented
 // Measurement validation parameters
 float _maxExpectedImpedance = 100000.0;  // Maximum expected impedance
 float _minExpectedImpedance = 1.0;       // Minimum expected impedance
-int _numAverages = 1;                    // Number of averages (1 = no averaging)
+int _numAverages = 3;                    // Default: three validated averages per frequency point
 bool _enableNotchFilter = false;         // Enable 50/60 Hz rejection
 bool _notchIs50Hz = false;               // True for 50Hz, false for 60Hz
 ```

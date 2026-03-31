@@ -861,97 +861,101 @@ void HELPStat::AD5940_TDD(float startFreq, float endFreq, uint32_t numPoints, fl
 void HELPStat::AD5940_DFTMeasure(void) {
 
   SWMatrixCfg_Type sw_cfg;
-  impStruct eis;
+  impStruct eis = {};
 
-  /* Real / Imaginary components */
-  int32_t realRcal, imageRcal; 
-  int32_t realRz, imageRz; 
+  int32_t realRcal, imageRcal;
+  int32_t realRz, imageRz;
+  float magRcal = 0.0f, phaseRcal = 0.0f;
+  float magRz = 0.0f, phaseRz = 0.0f;
 
-  /* Magnitude / phase */
-  float magRcal, phaseRcal; 
-  float magRz, phaseRz;
-  float calcMag, calcPhase; // phase in rads 
-  // float rcalVal = 9930; // known Rcal - measured with DMM
+  const int kMaxAttempts = 4;
+  bool validated = false;
 
-  // Serial.print("Recommended clock cycles: ");
-  // Serial.println(_waitClcks);
+  for (int attempt = 0; attempt < kMaxAttempts; attempt++) {
+    if (attempt > 0) {
+      delay(100);
+      Serial.print("EIS retry ");
+      Serial.print(attempt);
+      Serial.print(" @ ");
+      Serial.print(_currentFreq);
+      Serial.println(" Hz");
+    }
 
-  /* Convert clock cycles to 10us units: clks / (clk_freq * 10e-6) */
-  uint32_t delayUnits = (uint32_t)(_waitClcks * 100000.0 / SYSCLCK);
-  AD5940_Delay10us(delayUnits > 0 ? delayUnits : 1);
+    uint32_t delayUnits = (uint32_t)(_waitClcks * 100000.0 / SYSCLCK);
+    AD5940_Delay10us(delayUnits > 0 ? delayUnits : 1);
 
-  /* Measuring RCAL */
-  sw_cfg.Dswitch = SWD_RCAL0;
-  sw_cfg.Pswitch = SWP_RCAL0;
-  sw_cfg.Nswitch = SWN_RCAL1;
-  sw_cfg.Tswitch = SWT_RCAL1|SWT_TRTIA;
-  AD5940_SWMatrixCfgS(&sw_cfg);
-	
-	AD5940_AFECtrlS(AFECTRL_HSTIAPWR|AFECTRL_INAMPPWR|AFECTRL_EXTBUFPWR|\
+    sw_cfg.Dswitch = SWD_RCAL0;
+    sw_cfg.Pswitch = SWP_RCAL0;
+    sw_cfg.Nswitch = SWN_RCAL1;
+    sw_cfg.Tswitch = SWT_RCAL1|SWT_TRTIA;
+    AD5940_SWMatrixCfgS(&sw_cfg);
+
+    AD5940_AFECtrlS(AFECTRL_HSTIAPWR|AFECTRL_INAMPPWR|AFECTRL_EXTBUFPWR|\
                 AFECTRL_WG|AFECTRL_DACREFPWR|AFECTRL_HSDACPWR|\
                 AFECTRL_SINC2NOTCH, bTRUE);
 
-  AD5940_AFECtrlS(AFECTRL_WG|AFECTRL_ADCPWR, bTRUE);
-  settlingDelay(_currentFreq);
-  
-  AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT, bTRUE);
+    AD5940_AFECtrlS(AFECTRL_WG|AFECTRL_ADCPWR, bTRUE);
+    settlingDelay(_currentFreq);
 
-  /* Wait for DFT to complete: split into two halves per AD sequencer pattern */
-  AD5940_Delay10us(delayUnits / 2 > 0 ? delayUnits / 2 : 1);
-  AD5940_Delay10us(delayUnits / 2 > 0 ? delayUnits / 2 : 1);
+    AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT, bTRUE);
 
-  pollDFT(&realRcal, &imageRcal);
+    AD5940_Delay10us(delayUnits / 2 > 0 ? delayUnits / 2 : 1);
+    AD5940_Delay10us(delayUnits / 2 > 0 ? delayUnits / 2 : 1);
 
-  AD5940_AFECtrlS(AFECTRL_ADCPWR|AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG, bFALSE);
+    pollDFT(&realRcal, &imageRcal);
 
-  sw_cfg.Dswitch = SWD_CE0;
-  sw_cfg.Pswitch = SWP_CE0;
-  sw_cfg.Nswitch = SWN_SE0;
-  sw_cfg.Tswitch = SWT_TRTIA|SWT_SE0LOAD;
-  AD5940_SWMatrixCfgS(&sw_cfg);
+    AD5940_AFECtrlS(AFECTRL_ADCPWR|AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG, bFALSE);
 
-  AD5940_AFECtrlS(AFECTRL_ADCPWR|AFECTRL_WG, bTRUE);
-  settlingDelay(_currentFreq);
+    sw_cfg.Dswitch = SWD_CE0;
+    sw_cfg.Pswitch = SWP_CE0;
+    sw_cfg.Nswitch = SWN_SE0;
+    sw_cfg.Tswitch = SWT_TRTIA|SWT_SE0LOAD;
+    AD5940_SWMatrixCfgS(&sw_cfg);
 
-  AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT, bTRUE);
+    AD5940_AFECtrlS(AFECTRL_ADCPWR|AFECTRL_WG, bTRUE);
+    settlingDelay(_currentFreq);
 
-  AD5940_Delay10us(delayUnits / 2 > 0 ? delayUnits / 2 : 1);
-  AD5940_Delay10us(delayUnits / 2 > 0 ? delayUnits / 2 : 1);
+    AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT, bTRUE);
 
-  /* Polling and retrieving data from the DFT */
-  pollDFT(&realRz, &imageRz);
+    AD5940_Delay10us(delayUnits / 2 > 0 ? delayUnits / 2 : 1);
+    AD5940_Delay10us(delayUnits / 2 > 0 ? delayUnits / 2 : 1);
 
-  // AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-  // AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
+    pollDFT(&realRz, &imageRz);
 
-  AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG|AFECTRL_ADCPWR, bFALSE);  /* Stop ADC convert and DFT */
-  AD5940_AFECtrlS(AFECTRL_HSTIAPWR|AFECTRL_INAMPPWR|AFECTRL_EXTBUFPWR|\
+    AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG|AFECTRL_ADCPWR, bFALSE);
+    AD5940_AFECtrlS(AFECTRL_HSTIAPWR|AFECTRL_INAMPPWR|AFECTRL_EXTBUFPWR|\
                 AFECTRL_WG|AFECTRL_DACREFPWR|AFECTRL_HSDACPWR|\
                 AFECTRL_SINC2NOTCH, bFALSE);
 
-  // Serial.println("Measurement sequence finished.");
+    getMagPhase(realRcal, imageRcal, &magRcal, &phaseRcal);
+    getMagPhase(realRz, imageRz, &magRz, &phaseRz);
 
-  getMagPhase(realRcal, imageRcal, &magRcal, &phaseRcal);
-  getMagPhase(realRz, imageRz, &magRz, &phaseRz);
+    eis.magnitude = (magRcal / magRz) * _rcalVal;
+    eis.phaseRad = phaseRcal - phaseRz;
+    eis.real = eis.magnitude * cos(eis.phaseRad);
+    eis.imag = eis.magnitude * sin(eis.phaseRad) * -1;
+    eis.phaseDeg = eis.phaseRad * 180 / MATH_PI;
+    eis.freq = _currentFreq;
 
-  /* Finding the actual magnitude and phase */
-  eis.magnitude = (magRcal / magRz) * _rcalVal; 
-  eis.phaseRad = phaseRcal - phaseRz;
-  eis.real = eis.magnitude * cos(eis.phaseRad);
-  eis.imag = eis.magnitude * sin(eis.phaseRad) * -1; 
-  eis.phaseDeg = eis.phaseRad * 180 / MATH_PI; 
-  eis.freq = _currentFreq;
-
-  /* Validate measurement before storing */
-  if(!validateMeasurement(&eis)) {
-    Serial.print("WARNING: Measurement at ");
+    if (validateMeasurement(&eis)) {
+      validated = true;
+      break;
+    }
+    Serial.print("WARNING: validation failed at ");
     Serial.print(_currentFreq);
-    Serial.println(" Hz failed validation - retrying...");
-    // Could implement retry logic here
-    // For now, store anyway but mark as potentially invalid
+    Serial.println(" Hz");
   }
 
-  /* Printing Values */
+  if (!validated) {
+    Serial.println("ERROR: all attempts failed validation; storing NaN for this point");
+    eis.magnitude = NAN;
+    eis.phaseRad = NAN;
+    eis.real = NAN;
+    eis.imag = NAN;
+    eis.phaseDeg = NAN;
+    eis.freq = _currentFreq;
+  }
+
   printf("%d,", _sweepCfg.SweepIndex);
   printf("%.2f,", _currentFreq);
   printf("%.3f,", magRcal);
@@ -961,15 +965,12 @@ void HELPStat::AD5940_DFTMeasure(void) {
   printf("%.4f,", eis.imag);
   printf("%.4f\n", eis.phaseRad);
 
-  eisArr[_sweepCfg.SweepIndex + (_currentCycle * _sweepCfg.SweepPoints)] = eis; 
-  // printf("Array Index: %d\n",_sweepCfg.SweepIndex + (_currentCycle * _sweepCfg.SweepPoints));
+  eisArr[_sweepCfg.SweepIndex + (_currentCycle * _sweepCfg.SweepPoints)] = eis;
 
-  /* Updating Frequency - configure gain for NEXT measurement BEFORE returning */
   logSweep(&_sweepCfg, &_currentFreq);
-  // Configure gain for next frequency now, so it's ready when we measure RCAL
   if(_sweepCfg.SweepEn == bTRUE) {
     configureFrequency(_currentFreq);
-    delay(200); // Settling delay after gain configuration
+    delay(200);
   }
 }
 
@@ -1087,12 +1088,7 @@ void HELPStat::runSweep(void) {
     while(_sweepCfg.SweepEn == bTRUE)
     {
       // Gain is already configured for current frequency (configured at end of previous measurement or at start)
-      // Use averaging if configured (numAverages > 1)
-      if(_numAverages > 1) {
-        AD5940_DFTMeasureWithAveraging(_numAverages);
-      } else {
-        AD5940_DFTMeasure();
-      }
+      AD5940_DFTMeasureWithAveraging(_numAverages);
       // AD5940_DFTMeasureEIS();
       AD5940_AFECtrlS(AFECTRL_HSTIAPWR|AFECTRL_INAMPPWR|AFECTRL_EXTBUFPWR|\
               AFECTRL_WG|AFECTRL_DACREFPWR|AFECTRL_HSDACPWR|\
@@ -1166,12 +1162,7 @@ void HELPStat::runSweep(uint32_t numCycles, uint32_t delaySecs) {
     while(_sweepCfg.SweepEn == bTRUE)
     {
       // Gain is already configured for current frequency (configured at end of previous measurement or at start)
-      // Use averaging if configured (numAverages > 1)
-      if(_numAverages > 1) {
-        AD5940_DFTMeasureWithAveraging(_numAverages);
-      } else {
-        AD5940_DFTMeasure();
-      }
+      AD5940_DFTMeasureWithAveraging(_numAverages);
       // AD5940_DFTMeasureEIS();
       AD5940_AFECtrlS(AFECTRL_HSTIAPWR|AFECTRL_INAMPPWR|AFECTRL_EXTBUFPWR|\
               AFECTRL_WG|AFECTRL_DACREFPWR|AFECTRL_HSDACPWR|\
@@ -1558,12 +1549,18 @@ void HELPStat::saveDataEIS() {
   /* Writing to the files */
   Serial.println("Saving to folder now.");
 
-  // All cycles 
-  String filePath = _folderName + "/" + _fileName + ".csv";
+  // Unique filename per sweep (millis since boot) so wearable / repeat sweeps do not overwrite.
+  String filePath = _folderName + "/" + _fileName + "_" + String((unsigned long)millis()) + ".csv";
 
   File dataFile = SD.open(filePath, FILE_WRITE); 
   if(dataFile)
   {
+    float tdie = readInternalTemperature();
+    dataFile.print("# rcal_Ohm=");
+    dataFile.print(_rcalVal, 4);
+    dataFile.print(" dieTemp_C_approx=");
+    dataFile.println(tdie, 2);
+
     for(uint32_t i = 0; i <= _numCycles; i++)
     {
       dataFile.print("Freq, Magnitude, Phase (rad), Phase (deg), Real, Imag");
@@ -1592,7 +1589,8 @@ void HELPStat::saveDataEIS() {
       dataFile.println("");
     }
     dataFile.close();
-    Serial.println("Data appended successfully.");
+    Serial.print("Data saved to ");
+    Serial.println(filePath);
   }
 }
 
@@ -1621,12 +1619,17 @@ void HELPStat::saveDataEIS(String dirName, String fileName) {
   /* Writing to the files */
   Serial.println("Saving to folder now.");
 
-  // All cycles 
-  String filePath = directory + "/" + fileName + ".csv";
+  String filePath = dirName + "/" + fileName + "_" + String((unsigned long)millis()) + ".csv";
 
   File dataFile = SD.open(filePath, FILE_WRITE); 
   if(dataFile)
   {
+    float tdie = readInternalTemperature();
+    dataFile.print("# rcal_Ohm=");
+    dataFile.print(_rcalVal, 4);
+    dataFile.print(" dieTemp_C_approx=");
+    dataFile.println(tdie, 2);
+
     for(uint32_t i = 0; i <= _numCycles; i++)
     {
       dataFile.print("Freq, Magnitude, Phase (rad), Phase (deg), Real, Imag");
@@ -1655,7 +1658,8 @@ void HELPStat::saveDataEIS(String dirName, String fileName) {
       dataFile.println("");
     }
     dataFile.close();
-    Serial.println("Data appended successfully.");
+    Serial.print("Data saved to ");
+    Serial.println(filePath);
   }
 }
 
@@ -3186,6 +3190,13 @@ void HELPStat::printDataCSV(void) {
   Serial.print(",");
   Serial.println(_calculated_Rs, 6);
   Serial.println("=== END CSV ===");
+
+  float tdie = readInternalTemperature();
+  Serial.println("\n=== AFE LOG (approximate; not applied to correct Z) ===");
+  Serial.println("DieTemp_C,RCAL_Ohm");
+  Serial.print(tdie, 2);
+  Serial.print(",");
+  Serial.println(_rcalVal, 4);
 }
 
 /*
@@ -3252,6 +3263,16 @@ void HELPStat::setParameters(int mode, float startFreq, float endFreq, uint32_t 
       _cvScanRate = 0.1; // Default scan rate
     }
   }
+}
+
+void HELPStat::setRcalVal(float ohms) {
+  if (ohms > 0.5f && ohms < 1.0e6f)
+    _rcalVal = ohms;
+}
+
+void HELPStat::setDataLogNames(const String& folder, const String& fileBase) {
+  _folderName = folder;
+  _fileName = fileBase;
 }
 
 /*
@@ -3409,6 +3430,7 @@ void HELPStat::AD5940_DFTMeasureWithAveraging(int numAverages) {
   
   impStruct sum = {0};
   int validCount = 0;
+  float lastMagRcal = 0.0f, lastMagRz = 0.0f;
   
   for(int i = 0; i < numAverages; i++) {
     impStruct eis;
@@ -3481,6 +3503,8 @@ void HELPStat::AD5940_DFTMeasureWithAveraging(int numAverages) {
       sum.phaseRad += eis.phaseRad;
       sum.phaseDeg += eis.phaseDeg;
       validCount++;
+      lastMagRcal = magRcal;
+      lastMagRz = magRz;
     }
     
     // Small delay between averages
@@ -3497,15 +3521,36 @@ void HELPStat::AD5940_DFTMeasureWithAveraging(int numAverages) {
     avg.phaseDeg = sum.phaseDeg / validCount;
     avg.freq = _currentFreq;
     
-    // Store averaged result
     eisArr[_sweepCfg.SweepIndex + (_currentCycle * _sweepCfg.SweepPoints)] = avg;
     
-    printf("%d,%.2f,%.3f,%.3f,%f,%.4f,%.4f,%.4f\n", 
-           _sweepCfg.SweepIndex, _currentFreq, 
-           sum.magnitude/validCount, sum.magnitude/validCount,
-           avg.magnitude, avg.real, avg.imag, avg.phaseRad);
+    printf("%d,", _sweepCfg.SweepIndex);
+    printf("%.2f,", _currentFreq);
+    printf("%.3f,", lastMagRcal);
+    printf("%.3f,", lastMagRz);
+    printf("%f,", avg.magnitude);
+    printf("%.4f,", avg.real);
+    printf("%.4f,", avg.imag);
+    printf("%.4f\n", avg.phaseRad);
   } else {
     Serial.println("ERROR: All measurements failed validation!");
+    impStruct bad = {};
+    bad.freq = _currentFreq;
+    bad.magnitude = NAN;
+    bad.phaseRad = NAN;
+    bad.real = NAN;
+    bad.imag = NAN;
+    bad.phaseDeg = NAN;
+    eisArr[_sweepCfg.SweepIndex + (_currentCycle * _sweepCfg.SweepPoints)] = bad;
+    printf("%d,", _sweepCfg.SweepIndex);
+    printf("%.2f,", _currentFreq);
+    printf("nan,nan,nan,nan,nan,nan\n");
+  }
+
+  /* Must match AD5940_DFTMeasure: advance sweep and configure next frequency */
+  logSweep(&_sweepCfg, &_currentFreq);
+  if(_sweepCfg.SweepEn == bTRUE) {
+    configureFrequency(_currentFreq);
+    delay(200);
   }
 }
 

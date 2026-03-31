@@ -67,7 +67,7 @@ The system supports seven measurement modes (EIS is fully implemented; others ar
 | **User Input** | Physical push-button on GPIO 7 |
 | **Indicator** | LED on GPIO 6 |
 | **Power** | USB-C or 3.7 V LiPo battery |
-| **RCAL** | On-board calibration resistor (nominal **100 Ω** typical; **measure with a DMM** and set `rcalVal` — see [EIS accuracy](#eis-accuracy-limitations-and-best-practices)) |
+| **RCAL** | On-board calibration resistor: firmware defaults to **1 kΩ** (WatchScript-style pairing with the RTIA schedule). If your PCB still has **100 Ω**, set **`rcalVal`** / **`RCAL:`** / NVS to the **measured** value — see [EIS accuracy](#eis-accuracy-limitations-and-best-practices). |
 
 ---
 
@@ -179,7 +179,7 @@ Best for: development, debugging, and quick characterization.
    ```
    HELP                    — list all commands
    MEASURE:SAMPLE          — run default 1 Hz – 200 kHz sweep
-   MEASURE:0,200000,1,10,0,0,100,1,1,127000,150,0,0,200   — custom sweep (rcal = on-board RCAL, nominal 100 Ω)
+   MEASURE:0,200000,1,10,0,0,1000,1,1,127000,150,0,0,200   — custom sweep (`rcalVal` = measured RCAL; use **100** only if a 100 Ω part is populated)
    ```
 3. CSV data prints to the terminal. Copy-paste into a spreadsheet or use the Python scripts below.
 
@@ -189,7 +189,7 @@ These scripts assume **Python 3** with **`pyserial`** (`pip install -r requireme
 
 | Script | What it does |
 |--------|----------------|
-| **`testing/scenario1_serial_sample.py`** | Sends **`WEARABLE:OFF`** (queued early), waits until the firmware is idle (**`Ready for next measurement`** or **`Wearable auto-sweep DISABLED`**), then runs a **`MEASURE`** and saves the **`=== EIS DATA CSV ===` … `=== END CSV ===`** block. **Default sweep:** **10 kHz → 1 kHz**, **2** DFT points, **150 mV**, **`rcalVal = 100`** Ω (nominal on-board RCAL). **Single frequency:** add the frequency in Hz as the **last** argument, e.g. `10000` → one point at 10 kHz (uses a narrow start/end span so total sweep points = 1; `startFreq == endFreq` is invalid in firmware). Outputs: `scenario1_eis_sample.csv` or `scenario1_eis_sample_single.csv`. |
+| **`testing/scenario1_serial_sample.py`** | Sends **`WEARABLE:OFF`** (queued early), waits until the firmware is idle (**`Ready for next measurement`** or **`Wearable auto-sweep DISABLED`**), then runs a **`MEASURE`** and saves the **`=== EIS DATA CSV ===` … `=== END CSV ===`** block. **Default sweep:** **10 kHz → 1 kHz**, **2** DFT points, **150 mV**, **`rcalVal = 1000`** Ω (default aligned with **1 kΩ RCAL**). **Single frequency:** add the frequency in Hz as the **last** argument, e.g. `10000` → one point at 10 kHz (uses a narrow start/end span so total sweep points = 1; `startFreq == endFreq` is invalid in firmware). Outputs: `scenario1_eis_sample.csv` or `scenario1_eis_sample_single.csv`. |
 | **`testing/board_status_wearable.py`** | Sends **`STATUS`**, then **`WEARABLE:ON`** (wearable state is **RAM-only** until power-cycle/reflash). Optional: `--wait-ready 600` waits for **`Ready for next measurement`** then prints **`STATUS`** again (useful after a long auto-sweep). |
 
 **Examples (Windows, project root):**
@@ -255,7 +255,7 @@ After **each** sweep completes, the firmware (see `src/main.cpp` → `printDataC
 |------|----------------|-------------------|
 | **USB serial (115200)** | Prints **`=== EIS DATA CSV ===` … `=== END CSV ===`** with columns **`Frequency(Hz),Real(Ohm),Imaginary(Ohm),Magnitude(Ohm),Phase(Degrees)`** plus calculated **Rct/Rs** block. | Works whenever USB is connected. Leave a terminal open or run a **logger** that reads COM and **appends** each CSV block to a file. **While `runSweep()` is active**, new serial **commands** are not parsed; the CSV still appears **after** each sweep finishes. |
 | **Bluetooth Low Energy** | **`BLE_transmitResults()`** notifies **Rct**, **Rs**, then **per-point** frequency, real, imag, phase (deg), magnitude. | Use the **web companion** ([`web/helpstat-app`](#companion-web-app-webhelpstat-app)) in **Chrome** or **Edge** (Web Bluetooth), or the **native iOS app** ([`ios/HELPStatCompanion`](#native-ios-app-ioshelpstatcompanion)). Connect to **`HELPStat`**. The web app stores history **per Pacific calendar day** (IndexedDB); you can **export/import JSON**. iPhone must use the **native app** for live BLE (no Web Bluetooth in Safari). |
-| **microSD card** | **`saveDataEIS()`** writes **`/<folder>/<file>.csv`** (defaults are along the lines of **`eis`** / **`sweep_1Hz_200kHz`**). | Requires a **mounted** card. The **same path** is used each time, so **`FILE_WRITE` may overwrite** the previous file rather than keeping a long archive—treat SD as **“latest sweep on card”** unless you change folder/file (e.g. via BLE characteristics) or extend firmware to use **timestamped filenames**. |
+| **microSD card** | **`saveDataEIS()`** writes under **`/<folder>/`** with a **timestamped** base name, e.g. **`sweep_1Hz_200kHz_<millis>.csv`**, plus a **`# rcal_Ohm=… dieTemp_C_approx=…`** header line. | Requires a **mounted** card. Older tooling should **ignore `#` comment lines** when parsing numeric rows. |
 
 #### Companions and legacy tools
 
@@ -602,23 +602,35 @@ If the board runs **automatic sweeps about every 5 minutes**, **`WEARABLE:ON`** 
 
 The firmware runs a **real** AD5940 EIS pipeline (excitation → TIA → DFT → ratiometric scaling vs **RCAL**). Reported **Z**, **Rct**, and **Rs** are only as trustworthy as **hardware, calibration, and assumptions** below.
 
+### WatchScript-aligned acquisition (default firmware behavior)
+
+Compared with an earlier capstone revision, the **EIS sweep path** is aligned with a **WatchScript-style** measurement engine:
+
+- **`calHSTIA` table** in `src/main.cpp` maps frequency bands to **HSTIA RTIA** (40k → 10k → 5k → 1k → 200 Ω) with a top threshold at **200 kHz** so **1 Hz–200 kHz** sweeps remain valid.
+- **`configureFrequency()`** → **`setHSTIAWithHysteresis()`** applies **10% boundary hysteresis** to reduce RTIA chatter; **`setHSTIA()`** uses **`AD5940_GetFreqParameters()`** for **per-frequency SINC2/SINC3 OSR and DFT length** (not a single fixed 16384-point setting during the sweep).
+- After each point, **`logSweep()`** then **`configureFrequency(_currentFreq)`** runs so the **next** frequency’s gain and filters are set **before** the following RCAL/cell sequence (same ordering as WatchScript).
+- **`runSweep()`** always calls **`AD5940_DFTMeasureWithAveraging(_numAverages)`** with default **`_numAverages = 3`**; only **validator-approved** samples contribute to the average. **`AD5940_DFTMeasure()`** (if used elsewhere) **retries** up to four times and stores **NaN** if all attempts fail validation.
+- **Default `rcalVal` / `_rcalVal` is 1000 Ω** to match a **1 kΩ on-board RCAL** recommended for this RTIA schedule. **NVS** may still hold an older value (e.g. 100 Ω) after upgrade — use **`RCAL:`** or erase the **`helpstat`** namespace if the stored value no longer matches the populated resistor.
+
+**Hardware note:** If you keep a **100 Ω** RCAL, you **must** set **`rcalVal`** to the **measured** resistance (serial / BLE / NVS). Replacing the part with **1 kΩ** (tight tolerance) is the configuration this default expects.
+
 ### 1. RCAL value and resistor tolerance
 
-Impedance magnitude is **scaled ratiometrically** against the **known calibration resistor** (`rcalVal` in `MEASURE` / `SET`, and defaults in `src/main.cpp` and `testing/` scripts). A **±5% (gold-band) RCAL** can introduce **roughly that same systematic bias** in reported |Z| if you leave **`rcalVal = 100`** while the true part is **95–105 Ω**.
+Impedance magnitude is **scaled ratiometrically** against the **known calibration resistor** (`rcalVal` in `MEASURE` / `SET`, **`RCAL:`** + NVS, and defaults in `src/main.cpp` and `testing/` scripts). A **±5% RCAL** can introduce **roughly that same systematic bias** in |Z| if **`rcalVal`** does not match the **true** ohms.
 
 **Mitigations (highest impact / lowest cost first):**
 
-- **Measure RCAL with a good bench DMM** (or 4-wire ohms if available) **before each deployment** or whenever you care about absolute accuracy; pass that number as **`rcalVal`** everywhere (serial, BLE, Python).
-- For new PCB spins, use a **tighter-tolerance RCAL** (e.g. **0.1%–1%** metal film or specified series such as Vishay PTF-style parts) so the **nominal** value stays close to truth between calibrations.
+- **Measure RCAL with a good bench DMM** (or 4-wire ohms if available) **before each deployment** or whenever you care about absolute accuracy; pass that number as **`rcalVal`** everywhere (serial, BLE, Python), or use the serial **`RCAL:`** command (e.g. **`RCAL:987.6`**) to update runtime and NVS.
+- For new PCB spins, use a **tighter-tolerance RCAL** (e.g. **0.1%–1%** metal film) so the **nominal** value stays close to truth between calibrations.
 
-Scripts default to **100 Ω** as a **nominal** placeholder, not a substitute for measurement.
+Scripts default to **1000 Ω** to match the **recommended 1 kΩ RCAL**; change the value if your board differs.
 
 ### 2. RCAL vs HSTIA (RTIA) — two different roles
 
 - **RCAL** sets the **reference** used in the **ratio** that converts DFT results to **ohms** for the unknown branch.
 - **HSTIA RTIA** (internal transimpedance gain, **200 Ω–160 kΩ**) sets how **cell current** is converted to **voltage** at the ADC so the signal stays in a useful range.
 
-They are **not** the same knob. A **100 Ω RCAL** does **not** mean the TIA is fixed at 100 Ω for the whole sweep.
+They are **not** the same knob. The value of **RCAL** does **not** fix **RTIA** for the whole sweep — **RTIA** still follows the **`calHSTIA`** schedule.
 
 **What this firmware does:** On each frequency step, **`configureFrequency()`** calls **`setHSTIAWithHysteresis()`**, which selects **RTIA** from the **`calHSTIA` table** in `src/main.cpp` (frequency thresholds at **0.51, 1.5, 20, 150, 400, 200000 Hz** mapped to **40k, 10k, 5k, 5k, 1k, 200 Ω** RTIA settings). It also switches **ADC rate / HP vs LP mode** around **80 kHz**, adjusts **CTIA** via **`optimalCtia()`**, and applies **10% hysteresis** at boundaries to avoid gain chatter (see **[docs/NEW_FEATURES.md](docs/NEW_FEATURES.md)**).
 
@@ -626,11 +638,11 @@ They are **not** the same knob. A **100 Ω RCAL** does **not** mean the TIA is f
 
 ### 3. ADC rate, filters, and DFT coherence
 
-The README **[AD5940 Datasheet-Driven Improvements](#ad5940-datasheet-driven-improvements)** table summarizes **ADC rate**, **SINC OSR**, **DFT delay**, and related fixes. The AD5940 still has **detailed constraints** linking **excitation frequency**, **DFT length**, **sample rate**, and **coherent averaging**. Treat ultra-wide **1 Hz–200 kHz** sweeps as **operationally validated in this project**, not as a guarantee of **minimum error** at every point without bench cross-checks (known R, RC network, or reference instrument).
+The README **[AD5940 Datasheet-Driven Improvements](#ad5940-datasheet-driven-improvements)** table summarizes **ADC rate**, **SINC OSR**, **DFT delay**, and related fixes. During **EIS sweeps**, **`setHSTIA()`** applies **`AD5940_GetFreqParameters()`** so **DFT length and OSRs** track **excitation frequency** (the **Sequencer / `AD5940_TDD`** init path may still show fixed **16384**-style defaults until the first **`configureFrequency()`**). Treat ultra-wide **1 Hz–200 kHz** sweeps as **operationally validated in this project**, not as a guarantee of **minimum error** at every point without bench cross-checks (known R, RC network, or reference instrument).
 
-### 4. SD card: single path, easy overwrite
+### 4. SD card files
 
-`saveDataEIS()` writes a **fixed** `/<folder>/<file>.csv` (defaults **`eis` / `sweep_1Hz_200kHz`**). Successive sweeps often **overwrite** the same file. For **wearable or longitudinal** studies, treat **BLE** or **USB logging** as the primary archive unless you add **timestamped filenames** (firmware change) or change folder/file per run.
+`saveDataEIS()` writes **timestamped** CSV files under the folder/file base set in `src/main.cpp` (and a **`#`** metadata line). Parsers should skip comment lines.
 
 ### 5. LMA fit (Rct, Rs) and initial guesses
 
@@ -642,7 +654,7 @@ The README **[AD5940 Datasheet-Driven Improvements](#ad5940-datasheet-driven-imp
 
 ### Summary
 
-The **largest practical systematic lever** under your control is **`rcalVal` matching the real RCAL** (and using a **tight-tolerance** RCAL on the board). **RTIA is switched during the sweep**, but **extreme |Z| vs gain** can still break points. Treat **SD** as **last sweep only** unless you change naming; treat **LMA outputs** as **model-dependent**; treat **temperature** as **uncorrected** in firmware today.
+The **largest practical systematic levers** are **`rcalVal` matching the real RCAL** (prefer **measured** ohms and, if possible, a **1 kΩ** part matched to the default), the **frequency/RTIA schedule**, and **multi-sample validation/averaging** per point. **RTIA is switched during the sweep**, but **extreme |Z| vs gain** can still break points. Treat **LMA outputs** as **model-dependent**; treat **temperature** as **uncorrected** in firmware today.
 
 ---
 

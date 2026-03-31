@@ -30,11 +30,27 @@
 */
 
 #include <Arduino.h>
+#include <Preferences.h>
 #include "HELPStat.h"
 #include <vector>
 #include <string>
 #include "esp_task_wdt.h"
 #include "esp_sleep.h"
+
+static Preferences g_calPrefs;
+
+static void loadRcalFromNVS(float& rcalOut, HELPStat& demo) {
+  g_calPrefs.begin("helpstat", true);
+  float stored = g_calPrefs.getFloat("rcal", NAN);
+  g_calPrefs.end();
+  if (!isnan(stored) && stored > 0.5f && stored < 1.0e6f) {
+    rcalOut = stored;
+    demo.setRcalVal(stored);
+    Serial.print("Loaded RCAL from NVS: ");
+    Serial.print(stored, 4);
+    Serial.println(" Ohm");
+  }
+}
 
 // Forward declaration for MeasurementMode enum (defined in HELPStat.h)
 // The enum is already included via HELPStat.h
@@ -63,14 +79,15 @@
 // Forward declaration
 void blinkLED(int cycles, bool state);
 
-calHSTIA test[] = {          
-  {0.51,    HSTIARTIA_40K},       
-  {1.5,     HSTIARTIA_10K},
-  {20,      HSTIARTIA_5K},
-  {150,     HSTIARTIA_5K},
-  {400,     HSTIARTIA_1K},
-  {200000,  HSTIARTIA_200}  
-};    
+/* Frequency-keyed RTIA schedule (WatchScript-style). Last threshold must be >= max sweep frequency (200 kHz here). */
+calHSTIA test[] = {
+  {0.51f,   HSTIARTIA_40K},
+  {1.5f,    HSTIARTIA_10K},
+  {20.0f,   HSTIARTIA_5K},
+  {150.0f,  HSTIARTIA_5K},
+  {400.0f,  HSTIARTIA_1K},
+  {200000.0f, HSTIARTIA_200},
+};
  
 /* Variables for function inputs */
 int gainSize = (int)sizeof(test) / sizeof(test[0]);
@@ -83,7 +100,7 @@ float startFreq = 200000;
 float endFreq = 1;
 float biasVolt = 0.0; 
 float zeroVolt = 0.0; 
-float rcalVal = 100.0f; // On-board RCAL (nominal 100 Ω: brown-black-brown, gold ±5%); measure with DMM for best accuracy
+float rcalVal = 1000.0f; // Match populated RCAL (1 kΩ recommended with this RTIA schedule); DMM + RCAL: / NVS. Use 100 Ω only if the board still has a 100 Ω part.
 
 int extGain = 1; 
 int dacGain = 1; 
@@ -153,10 +170,11 @@ void parseSerialCommand() {
       Serial.println("  delaySecs: Delay between cycles (seconds)");
       Serial.println("  amplitude: Signal amplitude (mV, 0-800)");
       Serial.println("\nExamples:");
-      Serial.println("  EIS: MEASURE:0,200000,1,10,0,0,100,1,1,127000,150,0,0,200");
-      Serial.println("  CV:  MEASURE:1,0,0,100,0.0,1.0,100,1,1,0,0,1,0,50");
+      Serial.println("  EIS: MEASURE:0,200000,1,10,0,0,1000,1,1,127000,150,0,0,200");
+      Serial.println("  CV:  MEASURE:1,0,0,100,0.0,1.0,1000,1,1,0,0,1,0,50");
       Serial.println("SHOW - Display current settings");
       Serial.println("STATUS - Show measurement status");
+      Serial.println("RCAL:ohms - Set RCAL & save to NVS (e.g. RCAL:98.7); RCAL:SHOW - print NVS/runtime");
       Serial.println("HELP - Show this help message");
       Serial.println("================================\n");
       return;
@@ -228,6 +246,40 @@ void parseSerialCommand() {
       demo.print_settings();
       return;
     }
+
+    // RCAL:ohms — set calibration resistor value, persist to NVS (survives reboot)
+    if (command.startsWith("RCAL:")) {
+      String rest = command.substring(5);
+      rest.trim();
+      if (rest == "SHOW" || rest == "?") {
+        g_calPrefs.begin("helpstat", true);
+        float s = g_calPrefs.getFloat("rcal", NAN);
+        g_calPrefs.end();
+        Serial.print("NVS RCAL (Ohm): ");
+        if (isnan(s)) {
+          Serial.println("(not set)");
+        } else {
+          Serial.println(s, 4);
+        }
+        Serial.print("Runtime rcalVal (Ohm): ");
+        Serial.println(rcalVal, 4);
+        return;
+      }
+      float v = rest.toFloat();
+      if (v > 0.5f && v < 1.0e6f) {
+        rcalVal = v;
+        demo.setRcalVal(v);
+        g_calPrefs.begin("helpstat", false);
+        g_calPrefs.putFloat("rcal", v);
+        g_calPrefs.end();
+        Serial.print("RCAL set to ");
+        Serial.print(v, 4);
+        Serial.println(" Ohm and saved to NVS.");
+      } else {
+        Serial.println("Invalid RCAL. Example: RCAL:98.7  |  RCAL:SHOW");
+      }
+      return;
+    }
     
     // MEASURE:SAMPLE must run before startsWith("MEASURE") or it is parsed as invalid params.
     if (command == "MEASURE:SAMPLE" || command == "MEASURE:DEFAULT") {
@@ -238,11 +290,11 @@ void parseSerialCommand() {
         10,                // points per decade
         0.0,               // bias
         0.0,               // zero volt
-        100.0,             // rcal (100 Ω on-board RCAL)
+        rcalVal,           // rcal (DMM / RCAL: / NVS)
         1,                 // extGain
         1,                 // dacGain
-        127000.0,          // rct_est
-        150.0,             // rs_est
+        rct_estimate,      // rct_est
+        rs_estimate,       // rs_est
         0,                 // numCycles
         0,                 // delaySecs
         200.0              // amplitude mV
@@ -291,6 +343,9 @@ void parseSerialCommand() {
             (uint32_t)paramsArray[11], // delaySecs
             200.0                // amplitude (default 200mV)
           );
+          rcalVal = paramsArray[5];
+          rct_estimate = paramsArray[8];
+          rs_estimate = paramsArray[9];
           Serial.println("Parameters set from command (legacy format, defaulting to EIS mode).");
         } else if (paramCount == 14) {
           // New format with mode and amplitude
@@ -310,6 +365,9 @@ void parseSerialCommand() {
             (uint32_t)paramsArray[12], // delaySecs
             paramsArray[13]      // amplitude
           );
+          rcalVal = paramsArray[6];
+          rct_estimate = paramsArray[9];
+          rs_estimate = paramsArray[10];
           Serial.println("Parameters set from command.");
         } else {
           Serial.println("ERROR: Invalid parameter count. Expected 12 (legacy) or 14 (new format) parameters.");
@@ -359,6 +417,9 @@ void parseSerialCommand() {
           (uint32_t)paramsArray[11], // delaySecs
           200.0                // amplitude (default 200mV)
         );
+        rcalVal = paramsArray[5];
+        rct_estimate = paramsArray[8];
+        rs_estimate = paramsArray[9];
         Serial.println("Parameters updated successfully (legacy format, defaulting to EIS mode).");
         demo.print_settings();
       } else if (paramCount == 14) {
@@ -379,6 +440,9 @@ void parseSerialCommand() {
           (uint32_t)paramsArray[12], // delaySecs
           paramsArray[13]      // amplitude
         );
+        rcalVal = paramsArray[6];
+        rct_estimate = paramsArray[9];
+        rs_estimate = paramsArray[10];
         Serial.println("Parameters updated successfully.");
         demo.print_settings();
       } else {
@@ -421,6 +485,9 @@ void setup() {
       Serial.println("WARNING: AD5940 may not be connected or responding!");
     }
   }
+
+  loadRcalFromNVS(rcalVal, demo);
+  demo.setDataLogNames(folderName, fileName);
 
   Serial.println("System ready! Type HELP for commands or MEASURE to start.");
 
@@ -468,7 +535,7 @@ void loop() {
     if (digitalRead(BUTTON) == LOW) {
       Serial.println("Button pressed; starting default sample EIS");
       demo.setParameters(
-        MODE_EIS, 200000.0, 1.0, 10, 0.0, 0.0, 100.0, 1, 1, 127000.0, 150.0, 0, 0, 200.0);
+        MODE_EIS, 200000.0, 1.0, 10, 0.0, 0.0, rcalVal, 1, 1, rct_estimate, rs_estimate, 0, 0, 200.0);
       measurementRequested = true;
     }
   }
@@ -480,7 +547,7 @@ void loop() {
       firstBoot = false;
       Serial.println("[WEARABLE] Auto-triggering EIS sweep...");
       demo.setParameters(
-        MODE_EIS, 200000.0, 1.0, 10, 0.0, 0.0, 100.0, 1, 1, 127000.0, 150.0, 0, 0, 200.0);
+        MODE_EIS, 200000.0, 1.0, 10, 0.0, 0.0, rcalVal, 1, 1, rct_estimate, rs_estimate, 0, 0, 200.0);
       measurementRequested = true;
     }
   }

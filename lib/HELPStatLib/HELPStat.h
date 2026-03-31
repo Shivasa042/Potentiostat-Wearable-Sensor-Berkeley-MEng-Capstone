@@ -295,7 +295,7 @@ class HELPStat {
         float _zeroVolt = 0.0;
         
         // Calibration Resistor 
-        float _rcalVal  = 1000; // Initialize w/ default values 
+        float _rcalVal  = 1000.0f; // Default 1 kΩ RCAL (WatchScript / Linnes-style); measure with DMM; use 100 Ω only if that is what is populated
 
         // Delay
         uint32_t _delaySecs = 0.0; // Initialize w/ default values 
@@ -346,7 +346,7 @@ class HELPStat {
         // Measurement validation parameters
         float _maxExpectedImpedance = 100000.0;  // Maximum expected impedance in Ohms
         float _minExpectedImpedance = 1.0;       // Minimum expected impedance in Ohms
-        int _numAverages = 1;                    // Number of averages per measurement
+        int _numAverages = 3;                    // Averages per frequency point (validated samples only)
         bool _enableNotchFilter = false;         // 50/60 Hz rejection filter
         bool _notchIs50Hz = false;               // True for 50Hz, false for 60Hz
         
@@ -453,6 +453,8 @@ class HELPStat {
         void printDataCSV(void);  // Print data as CSV to serial monitor
         void setParameters(float startFreq, float endFreq, uint32_t numPoints, float biasVolt, float zeroVolt, float rcalVal, int extGain, int dacGain, float rct_estimate, float rs_estimate, uint32_t numCycles, uint32_t delaySecs);
         void setParameters(int mode, float startFreq, float endFreq, uint32_t numPoints, float biasVolt, float zeroVolt, float rcalVal, int extGain, int dacGain, float rct_estimate, float rs_estimate, uint32_t numCycles, uint32_t delaySecs, float amplitude);
+        void setRcalVal(float ohms);
+        void setDataLogNames(const String& folder, const String& fileBase);
         MeasurementMode getMeasurementMode(void) { return _measurementMode; }  // Get current measurement mode
         
         // Measurement mode functions
