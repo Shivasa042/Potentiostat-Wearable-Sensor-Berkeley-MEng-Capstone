@@ -21,6 +21,7 @@ A portable Electrochemical Impedance Spectroscopy (EIS) system built around an *
 - [Serial Command Reference](#serial-command-reference)
 - [Python Scripts](#python-scripts)
 - [Analyzing EIS Data (Nyquist and Bode)](#analyzing-eis-data-nyquist-and-bode)
+- [Troubleshooting](#troubleshooting)
 - [Pin Configuration](#pin-configuration)
 - [Custom PCB Support](#custom-pcb-support)
 - [How EIS Works on This Board](#how-eis-works-on-this-board)
@@ -485,6 +486,51 @@ The firmware incorporates several corrections and optimizations derived from the
 | **Dynamic CTIA selection** | HSTIA feedback capacitance is now computed from the RTIA value and measurement frequency to maintain adequate TIA bandwidth (>=10x excitation frequency). |
 | **2-electrode mode** | Switch matrix Pswitch changed from `SWP_RE0` (dedicated reference electrode) to `SWP_CE0` (sense at counter electrode) across all measurement paths, enabling a simple 2-electrode cell suitable for wearable sweat sensors. |
 | **Wearable auto-sweep** | `loop()` includes a configurable timer that auto-triggers EIS sweeps and waits between measurements (USB-friendly; no light sleep on USB-Serial/JTAG). |
+
+---
+
+## Troubleshooting
+
+### Wearable timing (Scenario 3)
+
+If the board runs **automatic sweeps about every 5 minutes**, that matches **Scenario 3** with the default **`INTERVAL:300`** (300 seconds). Use serial commands **`STATUS`** / **`SHOW`** to confirm wearable mode and interval. Change interval with **`INTERVAL:N`** (seconds, minimum 10); disable auto-sweep with **`WEARABLE:OFF`**.
+
+### CSV shows `inf`, huge |Z|, or endless validation retries
+
+| Symptom | Things to check |
+|--------|------------------|
+| **`inf` magnitude / phase** | **Open circuit**, loose clip, or probe on the wrong net. For a bench check, use a **known resistor** (e.g. **1 kΩ**) **only** between **CE0** and **SE0** (2-electrode path). |
+| **Fit stuck at default Rct/Rs** | Poor data quality — fix **wiring** and **RCAL** / parameter estimates before trusting fitted values. |
+| **Python capture misses rows** | Firmware prints the header **`Frequency(Hz),...`** (not only `Freq(Hz)`). Use current **`testing/eis_sweep.py`** or **`testing/scenario1_serial_sample.py`** which match the **`=== EIS DATA CSV ===` … `=== END CSV ===`** block. |
+
+### Oscilloscope on the cell
+
+- You should see a **roughly sinusoidal** AC waveform at the **current sweep frequency**; **fuzz** on top is normal (digital noise, probes, ground loops, retries when the firmware **re-measures** a point).
+- The scope shows **voltage vs time**, not the **serial CSV stream**. When the sweep **steps** to another frequency, the **period** of the waveform **changes**.
+- **~200 mV/div** can be appropriate for small excitation; use **shorter ground**, **bandwidth limit**, or **averaging** on the scope to see the sine more clearly. Prefer **differential** probing if **USB ground** causes artifacts.
+
+### Cleaning data: physics-aware checks and simple filtering (no ML required)
+
+**Machine learning is not required** to improve usability of EIS CSV exports. Use **hardware fixes first**, then **post-processing**:
+
+1. **Load the numeric table**  
+   Columns are typically: `Frequency(Hz)`, `Real(Ohm)`, `Imaginary(Ohm)`, `Magnitude(Ohm)`, `Phase(Degrees)` (between the firmware CSV markers).
+
+2. **Physics-aware QC (flag or drop bad points)**  
+   - Remove **`NaN` / `inf`** in any numeric column.  
+   - Keep **`Frequency(Hz) > 0`**.  
+   - **Consistency:** compare reported magnitude to \(\sqrt{Z'^2 + Z''^2}\); flag rows where relative error exceeds a tolerance (e.g. **10–20%**) after accounting for rounding.  
+   - **Spikes (sorted by frequency):** flag adjacent points where **|Z|** jumps by an unrealistic ratio (e.g. **>5×**) with no smooth trend — often a bad gain point or glitch.  
+   - **Optional bound:** if you know the cell is ~**1 kΩ**, flag **|Z| > ~10 MΩ** as likely open-lead.
+
+3. **Simple filtering (after QC)**  
+   - Along **sorted frequency**, apply a **moving median** (window 3) to **Magnitude** and **Phase** to suppress isolated outliers.  
+   - **Best denoiser in the lab:** run **several sweeps** and take the **median or mean** of Real/Imag at each frequency.
+
+4. **Plot**  
+   Use **`testing/plot_eis_from_file.py`** on the cleaned CSV (or Excel) to inspect Nyquist and Bode.
+
+**Optional:** ML may help **downstream tasks** (classification, fusion), not basic cleanup.
 
 ---
 
