@@ -198,8 +198,8 @@ The board is designed to operate standalone — no USB cable or laptop required 
 1. Flash the firmware once (via Scenario 1).
 2. Connect the two electrodes from the watch back-plate to the AD5940's **CE0** (counter/excitation) and **SE0** (sense/working) pins.
 3. Power the board from a 3.7 V LiPo battery.
-4. On boot, the firmware automatically enters **wearable mode**:
-   - An EIS sweep runs immediately on power-up.
+4. For field use, enable **wearable mode** over serial (`WEARABLE:ON`). USB/bench builds default to **auto-sweep OFF** so lab scripts can run short sweeps without waiting out a full 200 kHz→1 Hz run first.
+   - With wearable mode on, an EIS sweep runs on the boot/interval schedule.
    - After each sweep the firmware **waits** for the configured interval (default 5 minutes), then runs the next sweep, saves to SD card, and transmits via BLE.
 5. On a **phone or laptop**, use the **web companion** ([`web/helpstat-app`](#companion-web-app-webhelpstat-app)) in **Chrome** or **Edge** (Web Bluetooth), the **native iOS app** ([`ios/HELPStatCompanion`](#native-ios-app-ioshelpstatcompanion)) on iPhone, or any generic BLE terminal.
 6. Connect to the device named **`HELPStat`**. History and plots are stored **per Pacific calendar day** in the web app (and optionally in the legacy Android build under `Originallibraries/`).
@@ -209,7 +209,7 @@ The board is designed to operate standalone — no USB cable or laptop required 
    WEARABLE:OFF       — stop auto-sweep (manual / button only)
    ```
 
-The board does **not** require a USB connection or laptop for measurements — the plug/unplug cycle is only an artifact of the Windows USB serial driver during development. In battery-powered mode, the firmware boots cleanly on power-up and sweeps begin automatically.
+The board does **not** require a USB connection or laptop for measurements — the plug/unplug cycle is only an artifact of the Windows USB serial driver during development. In battery-powered mode, send **`WEARABLE:ON`** once (or build with that default) if you want sweeps to start automatically on the timer.
 
 ### Scenario 4 — Automated Data Collection (Python)
 
@@ -302,8 +302,8 @@ All commands are sent over USB serial at **115200 baud**, terminated by a newlin
 | `MEASURE:SAMPLE` | Run default EIS sweep (1 Hz – 200 kHz) |
 | `MEASURE:<14 params>` | Start measurement with inline parameters |
 | `SET:<14 params>` | Set parameters without starting a measurement |
-| `WEARABLE:ON` | Enable automatic periodic EIS sweeps (default) |
-| `WEARABLE:OFF` | Disable auto-sweep; manual / button triggers only |
+| `WEARABLE:ON` | Enable automatic periodic EIS sweeps (use for Scenario 3 / field) |
+| `WEARABLE:OFF` | Disable auto-sweep (default on USB/bench; manual / button only) |
 | `INTERVAL:N` | Set auto-sweep interval to N seconds (min 10, default 300) |
 
 ### Parameter Format (14 values, comma-separated)
@@ -494,7 +494,7 @@ The firmware incorporates several corrections and optimizations derived from the
 
 ### Wearable timing (Scenario 3)
 
-If the board runs **automatic sweeps about every 5 minutes**, that matches **Scenario 3** with the default **`INTERVAL:300`** (300 seconds). Use serial commands **`STATUS`** / **`SHOW`** to confirm wearable mode and interval. Change interval with **`INTERVAL:N`** (seconds, minimum 10); disable auto-sweep with **`WEARABLE:OFF`**.
+If the board runs **automatic sweeps about every 5 minutes**, **`WEARABLE:ON`** is active with **`INTERVAL:300`** (300 seconds). Use serial commands **`STATUS`** / **`SHOW`** to confirm. Change interval with **`INTERVAL:N`** (seconds, minimum 10). On USB/bench the default is **`WEARABLE:OFF`** unless you enable it.
 
 ### CSV shows `inf`, huge |Z|, or endless validation retries
 

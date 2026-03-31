@@ -104,7 +104,8 @@ String serialInput = "";
 bool measurementRequested = false;
 
 // Wearable / standalone auto-sweep settings
-bool wearableMode = true;
+// USB / bench: false avoids a minutes-long auto-sweep before serial commands are useful. Enable for Scenario 3 (WEARABLE:ON).
+bool wearableMode = false;
 unsigned long sweepIntervalSec = 300;   // seconds between auto-sweeps (default 5 min)
 unsigned long lastSweepMs = 0;
 bool firstBoot = true;
@@ -401,8 +402,8 @@ void setup() {
   delay(1000);
   
   Serial.println("\n=== HELPStat EIS Measurement System ===");
-  Serial.println("Mode: 2-electrode wearable (auto-sweep ON)");
-  Serial.println("Type HELP for commands, WEARABLE:OFF to disable auto-sweep");
+  Serial.println("Mode: 2-electrode (auto-sweep OFF by default; WEARABLE:ON for Scenario 3)");
+  Serial.println("Type HELP for commands, WEARABLE:ON to enable timed sweeps");
   Serial.println("=======================================\n");
   
   demo.BLE_setup();

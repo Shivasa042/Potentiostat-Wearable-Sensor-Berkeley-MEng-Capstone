@@ -3,8 +3,9 @@
 Scenario 1 (laptop + USB serial): send MEASURE over 115200 baud and capture
 === EIS DATA CSV === ... === END CSV === from firmware.
 
-Default is a quick multi-point band. Pass a frequency (Hz) as the second argument
-to request a single-frequency sample. The firmware maps (start,end,numPoints) to
+Default is a very short multi-point sweep (2 frequencies, 10 kHz–1 kHz only, for speed).
+Pass a frequency (Hz) as the last argument to request a single-frequency sample.
+The firmware maps (start,end,numPoints) to
 SweepPoints via a log formula; start==end yields 0 points, so single-frequency
 mode uses start and end=start*1.035 with numPoints=100 so SweepPoints==1 (first
 measurement is at start).
@@ -56,26 +57,51 @@ def main() -> int:
         cmd = measure_cmd_single_frequency(single_hz)
         out_name = "scenario1_eis_sample_single.csv"
     else:
-        # Quick sample: 10 kHz down to 100 Hz, 2 points/decade, 200 mV
+        # Minimal sweep: one decade (10 kHz → 1 kHz), 2 points/decade → 2 DFT points only; HF band keeps each step short.
         cmd = (
-            "MEASURE:0,10000,100,2,0.0,0.0,100.0,1,1,127000.0,150.0,0,0,200\n"
+            "MEASURE:0,10000,1000,2,0.0,0.0,100.0,1,1,127000.0,150.0,0,0,150\n"
         )
         out_name = "scenario1_eis_sample.csv"
 
     print(f"Opening {port} @ 115200 …")
     ser = serial.Serial(port=port, baudrate=115200, timeout=2, write_timeout=2)
-    time.sleep(0.4)
+    time.sleep(0.3)
     ser.reset_input_buffer()
-    # Stops timed auto-sweeps when the firmware is idle (parsed each loop iteration).
+    # Queue ASAP so the first parseSerialCommand() after a blocking sweep sees it before another auto-sweep arms.
     ser.write(b"WEARABLE:OFF\n")
-    time.sleep(0.25)
+    ser.flush()
+
+    # While runSweep() is active, serial is not parsed — wait until idle before MEASURE.
+    idle_deadline = time.time() + 420.0
+    print("Waiting for firmware idle (Ready / WEARABLE:OFF ack) …")
+    drain_n = 0
+    while time.time() < idle_deadline:
+        raw = ser.readline()
+        if not raw:
+            continue
+        s = raw.decode("utf-8", errors="replace").rstrip()
+        if s:
+            drain_n += 1
+            # Do not print every sweep row while draining a long in-progress sweep.
+            if drain_n <= 3 or "Ready for next measurement" in s or "DISABLED" in s:
+                print(s)
+            elif drain_n % 200 == 0:
+                print(f"… still draining serial ({drain_n} lines) …")
+        if "Ready for next measurement" in s or "Wearable auto-sweep DISABLED" in s:
+            break
+    else:
+        print("Timed out waiting for idle; sending MEASURE anyway.", file=sys.stderr)
+
+    time.sleep(0.15)
     ser.reset_input_buffer()
     print("Sending:", cmd.strip())
     ser.write(cmd.encode("utf-8"))
 
     capturing = False
     lines: list[str] = []
-    deadline = time.time() + 420.0
+    # Single-point and tiny default sweep finish quickly; allow headroom if a wearable sweep was in progress.
+    wait_s = 180.0 if single_hz is not None else 240.0
+    deadline = time.time() + wait_s
 
     while time.time() < deadline:
         raw = ser.readline()
