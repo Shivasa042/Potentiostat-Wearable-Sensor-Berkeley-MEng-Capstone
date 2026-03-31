@@ -13,6 +13,7 @@ A portable Electrochemical Impedance Spectroscopy (EIS) system built around an *
   - [Build and Flash the Firmware](#build-and-flash-the-firmware)
 - [Usage Scenarios](#usage-scenarios)
   - [Scenario 1 — Laptop + USB Serial (Development)](#scenario-1--laptop--usb-serial-development)
+  - [Quick USB lab scripts (`testing/`)](#quick-usb-lab-scripts-testing)
   - [Scenario 2 — Standalone with Button + SD Card](#scenario-2--standalone-with-button--sd-card)
   - [Scenario 3 — Battery-Powered Wearable with BLE](#scenario-3--battery-powered-wearable-with-ble)
   - [Scenario 4 — Automated Data Collection (Python)](#scenario-4--automated-data-collection-python)
@@ -96,7 +97,9 @@ The system supports seven measurement modes (EIS is fully implemented; others ar
 ├── ios/
 │   └── HELPStatCompanion/     # Native SwiftUI iOS app (CoreBluetooth, same GATT + JSON history)
 ├── testing/                   # USB/serial capture, conversion, and plotting scripts
-│   ├── eis_sweep.py           # Clean EIS sweep script with Excel output
+│   ├── scenario1_serial_sample.py  # Fast lab sweep or single-frequency capture → CSV (see below)
+│   ├── board_status_wearable.py     # Print STATUS, enable WEARABLE:ON (optional wait for idle)
+│   ├── eis_sweep.py           # Full-band EIS sweep script with Excel output
 │   ├── send_eis_sample.py     # CLI tool with --port, --start-hz, --end-hz, --out options
 │   ├── eis_example.py         # Example: sweep + Nyquist/Bode plotting
 │   ├── replug_and_sweep.py    # One-shot USB sweep (Windows, handles USB re-enumeration)
@@ -143,10 +146,15 @@ If you keep a local copy named **Potentiostat-Wearable-Sensor-Berkeley-MEng-Caps
    - `env:esp32-s3-dev-module` — for the ESP32-S3 DevKitC
    - `env:custom-board` — for a custom PCB (see [Custom PCB Support](#custom-pcb-support))
 5. Click **Build** (checkmark icon) or press `Ctrl+Alt+B`.
-6. Click **Upload** (arrow icon) or run:
+6. Click **Upload** (arrow icon) or run from the project root:
    ```bash
    pio run -t upload
    ```
+   On Windows, if `pio` is not on your PATH, use:
+   ```bash
+   py -3 -m platformio run -t upload
+   ```
+   Close any **serial monitor** or **Python script** using the COM port first, or upload may fail with “port busy / access denied.”
 7. Open the serial monitor (plug icon) at **115200 baud**.
 
 **Windows Note:** After flashing, you may need to unplug and re-plug the USB cable once. This forces the ESP32-S3 to exit its ROM bootloader and boot into the application firmware. This is only needed for USB serial development, not for standalone operation.
@@ -173,6 +181,28 @@ Best for: development, debugging, and quick characterization.
    MEASURE:0,200000,1,10,0,0,100,1,1,127000,150,0,0,200   — custom sweep (rcal = on-board RCAL, nominal 100 Ω)
    ```
 3. CSV data prints to the terminal. Copy-paste into a spreadsheet or use the Python scripts below.
+
+### Quick USB lab scripts (`testing/`)
+
+These scripts assume **Python 3** with **`pyserial`** (`pip install -r requirements.txt`). They default to the **ESP32-S3** USB serial port (VID **303A**) or you can pass **`COM4`** (or your port) explicitly.
+
+| Script | What it does |
+|--------|----------------|
+| **`testing/scenario1_serial_sample.py`** | Sends **`WEARABLE:OFF`** (queued early), waits until the firmware is idle (**`Ready for next measurement`** or **`Wearable auto-sweep DISABLED`**), then runs a **`MEASURE`** and saves the **`=== EIS DATA CSV ===` … `=== END CSV ===`** block. **Default sweep:** **10 kHz → 1 kHz**, **2** DFT points, **150 mV**, **`rcalVal = 100`** Ω (nominal on-board RCAL). **Single frequency:** add the frequency in Hz as the **last** argument, e.g. `10000` → one point at 10 kHz (uses a narrow start/end span so total sweep points = 1; `startFreq == endFreq` is invalid in firmware). Outputs: `scenario1_eis_sample.csv` or `scenario1_eis_sample_single.csv`. |
+| **`testing/board_status_wearable.py`** | Sends **`STATUS`**, then **`WEARABLE:ON`** (wearable state is **RAM-only** until power-cycle/reflash). Optional: `--wait-ready 600` waits for **`Ready for next measurement`** then prints **`STATUS`** again (useful after a long auto-sweep). |
+
+**Examples (Windows, project root):**
+
+```bash
+py -3 testing/scenario1_serial_sample.py COM4
+py -3 testing/scenario1_serial_sample.py COM4 10000
+py -3 testing/board_status_wearable.py COM4
+py -3 testing/board_status_wearable.py COM4 --wait-ready 600
+```
+
+**Wearable vs lab:** Firmware defaults to **`WEARABLE:OFF`** on USB/bench so a script can run a **short** sweep without waiting for a **200 kHz → 1 Hz** auto-sweep to finish first. For **Scenario 3** (timed sweeps), send **`WEARABLE:ON`** once (or use `board_status_wearable.py`). The first time you enable wearable with **`firstBoot`**, the firmware may **immediately** start the default full sweep.
+
+**Single-frequency note:** The AD5940 path computes sweep length from **`log10(end/start) × numPoints`**. Equal start/end yields **zero** points, so the single-point helper uses **`end ≈ 1.035 × start`** with **`numPoints = 100`** so only **one** measurement runs at **`startFreq`**.
 
 ### Scenario 2 — Standalone with Button + SD Card
 
@@ -346,7 +376,9 @@ SET:0,100,50000,20,0,0,100,1,1,127000,150,0,0,150
 
 | Script | Purpose | Key Options |
 |--------|---------|-------------|
-| `testing/eis_sweep.py` | Auto-detect board, sweep, save to Excel | Edit constants at top of file |
+| `testing/scenario1_serial_sample.py` | Short default sweep or single-frequency CSV capture; syncs with firmware idle | Port, optional `FREQ_HZ` last arg; see [Quick USB lab scripts](#quick-usb-lab-scripts-testing) |
+| `testing/board_status_wearable.py` | `STATUS` + `WEARABLE:ON`; optional post-sweep `STATUS` | Port; `--wait-ready SEC` |
+| `testing/eis_sweep.py` | Auto-detect board, full sweep, save to Excel | Edit constants at top of file |
 | `testing/send_eis_sample.py` | Full CLI tool for custom sweeps | `--port`, `--start-hz`, `--end-hz`, `--amplitude-mv`, `--out` |
 | `testing/eis_example.py` | Sweep with Nyquist + Bode plotting | `--port`, `--times`, `--out` |
 | `testing/replug_and_sweep.py` | Windows USB re-enumeration handler | Edit constants at top of file |
@@ -494,7 +526,14 @@ The firmware incorporates several corrections and optimizations derived from the
 
 ### Wearable timing (Scenario 3)
 
-If the board runs **automatic sweeps about every 5 minutes**, **`WEARABLE:ON`** is active with **`INTERVAL:300`** (300 seconds). Use serial commands **`STATUS`** / **`SHOW`** to confirm. Change interval with **`INTERVAL:N`** (seconds, minimum 10). On USB/bench the default is **`WEARABLE:OFF`** unless you enable it.
+If the board runs **automatic sweeps about every 5 minutes**, **`WEARABLE:ON`** is active with **`INTERVAL:300`** (300 seconds). Use serial commands **`STATUS`** / **`SHOW`** to confirm. Change interval with **`INTERVAL:N`** (seconds, minimum 10). On USB/bench the firmware default is **`WEARABLE:OFF`** unless you enable it (state is **volatile** until you change it or reflash).
+
+### COM port “access denied” / upload fails (Windows)
+
+| Symptom | What to do |
+|--------|------------|
+| **`PermissionError` / port busy** when running Python or **PlatformIO upload** | Another program holds the COM port: **VS Code/Cursor serial monitor**, **PlatformIO device monitor**, or a **stuck `python.exe`** (e.g. `scenario1_serial_sample.py` still running). **End that task** in Task Manager or: `Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" \| Select ProcessId, CommandLine` in PowerShell, then `Stop-Process -Id <pid> -Force`. |
+| **Script times out** waiting for CSV | A **full wearable sweep** may still be running; **`runSweep()`** blocks serial parsing. Use **`WEARABLE:OFF`** (or `scenario1_serial_sample.py`, which waits for idle) or wait until **`Ready for next measurement`** before sending **`MEASURE`**. |
 
 ### CSV shows `inf`, huge |Z|, or endless validation retries
 
