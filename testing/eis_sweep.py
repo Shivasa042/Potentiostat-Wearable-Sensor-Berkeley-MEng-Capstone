@@ -164,7 +164,7 @@ def main():
         all_lines.append(raw)
         pprint(f"  {raw}")
 
-        if raw.startswith("Freq(Hz)"):
+        if raw.startswith("Freq(Hz)") or raw.startswith("Frequency(Hz)"):
             capturing = True
             continue
 
