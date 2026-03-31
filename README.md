@@ -23,6 +23,7 @@ A portable Electrochemical Impedance Spectroscopy (EIS) system built around an *
 - [Python Scripts](#python-scripts)
 - [Analyzing EIS Data (Nyquist and Bode)](#analyzing-eis-data-nyquist-and-bode)
 - [Troubleshooting](#troubleshooting)
+- [EIS accuracy, limitations, and best practices](#eis-accuracy-limitations-and-best-practices)
 - [Pin Configuration](#pin-configuration)
 - [Custom PCB Support](#custom-pcb-support)
 - [How EIS Works on This Board](#how-eis-works-on-this-board)
@@ -66,7 +67,7 @@ The system supports seven measurement modes (EIS is fully implemented; others ar
 | **User Input** | Physical push-button on GPIO 7 |
 | **Indicator** | LED on GPIO 6 |
 | **Power** | USB-C or 3.7 V LiPo battery |
-| **RCAL** | On-board calibration resistor (nominal **100 Ω**, typical bands brown–black–brown, gold ±5%); set `rcalVal` in commands to the **measured** value |
+| **RCAL** | On-board calibration resistor (nominal **100 Ω** typical; **measure with a DMM** and set `rcalVal` — see [EIS accuracy](#eis-accuracy-limitations-and-best-practices)) |
 
 ---
 
@@ -594,6 +595,54 @@ If the board runs **automatic sweeps about every 5 minutes**, **`WEARABLE:ON`** 
    Use **`testing/plot_eis_from_file.py`** on the cleaned CSV (or Excel) to inspect Nyquist and Bode.
 
 **Optional:** ML may help **downstream tasks** (classification, fusion), not basic cleanup.
+
+---
+
+## EIS accuracy, limitations, and best practices
+
+The firmware runs a **real** AD5940 EIS pipeline (excitation → TIA → DFT → ratiometric scaling vs **RCAL**). Reported **Z**, **Rct**, and **Rs** are only as trustworthy as **hardware, calibration, and assumptions** below.
+
+### 1. RCAL value and resistor tolerance
+
+Impedance magnitude is **scaled ratiometrically** against the **known calibration resistor** (`rcalVal` in `MEASURE` / `SET`, and defaults in `src/main.cpp` and `testing/` scripts). A **±5% (gold-band) RCAL** can introduce **roughly that same systematic bias** in reported |Z| if you leave **`rcalVal = 100`** while the true part is **95–105 Ω**.
+
+**Mitigations (highest impact / lowest cost first):**
+
+- **Measure RCAL with a good bench DMM** (or 4-wire ohms if available) **before each deployment** or whenever you care about absolute accuracy; pass that number as **`rcalVal`** everywhere (serial, BLE, Python).
+- For new PCB spins, use a **tighter-tolerance RCAL** (e.g. **0.1%–1%** metal film or specified series such as Vishay PTF-style parts) so the **nominal** value stays close to truth between calibrations.
+
+Scripts default to **100 Ω** as a **nominal** placeholder, not a substitute for measurement.
+
+### 2. RCAL vs HSTIA (RTIA) — two different roles
+
+- **RCAL** sets the **reference** used in the **ratio** that converts DFT results to **ohms** for the unknown branch.
+- **HSTIA RTIA** (internal transimpedance gain, **200 Ω–160 kΩ**) sets how **cell current** is converted to **voltage** at the ADC so the signal stays in a useful range.
+
+They are **not** the same knob. A **100 Ω RCAL** does **not** mean the TIA is fixed at 100 Ω for the whole sweep.
+
+**What this firmware does:** On each frequency step, **`configureFrequency()`** calls **`setHSTIAWithHysteresis()`**, which selects **RTIA** from the **`calHSTIA` table** in `src/main.cpp` (frequency thresholds at **0.51, 1.5, 20, 150, 400, 200000 Hz** mapped to **40k, 10k, 5k, 5k, 1k, 200 Ω** RTIA settings). It also switches **ADC rate / HP vs LP mode** around **80 kHz**, adjusts **CTIA** via **`optimalCtia()`**, and applies **10% hysteresis** at boundaries to avoid gain chatter (see **[docs/NEW_FEATURES.md](docs/NEW_FEATURES.md)**).
+
+**Residual risk:** The schedule is **frequency-based**, not **|Z|-based**. If the **cell impedance** at a given frequency is very far from what that gain step expects, you can still see **saturation**, **poor SNR**, or **validation failures** (`inf`, retries) even when RTIA is “correct” for frequency. Tighten the cell / amplitude / estimates, or narrow the sweep band for difficult loads.
+
+### 3. ADC rate, filters, and DFT coherence
+
+The README **[AD5940 Datasheet-Driven Improvements](#ad5940-datasheet-driven-improvements)** table summarizes **ADC rate**, **SINC OSR**, **DFT delay**, and related fixes. The AD5940 still has **detailed constraints** linking **excitation frequency**, **DFT length**, **sample rate**, and **coherent averaging**. Treat ultra-wide **1 Hz–200 kHz** sweeps as **operationally validated in this project**, not as a guarantee of **minimum error** at every point without bench cross-checks (known R, RC network, or reference instrument).
+
+### 4. SD card: single path, easy overwrite
+
+`saveDataEIS()` writes a **fixed** `/<folder>/<file>.csv` (defaults **`eis` / `sweep_1Hz_200kHz`**). Successive sweeps often **overwrite** the same file. For **wearable or longitudinal** studies, treat **BLE** or **USB logging** as the primary archive unless you add **timestamped filenames** (firmware change) or change folder/file per run.
+
+### 5. LMA fit (Rct, Rs) and initial guesses
+
+**`rct_est`** and **`rs_est`** (parameters 10–11 in the 14-field `MEASURE` format) seed the **Levenberg–Marquardt** fit. Defaults (**127 kΩ / 150 Ω**) match **one** development context; for other electrolytes, fouling, or electrode areas they can be **wrong**. Poor seeds → **wrong local minima** or poor convergence while CSV magnitudes may still look “reasonable.” **Tune estimates** to your cell order-of-magnitude; use **Nyquist** and **known physics** to sanity-check fitted **Rct/Rs**.
+
+### 6. Temperature
+
+**`readInternalTemperature()`** in `HELPStat.cpp` reads the **AD5940 die** temperature with an **approximate** conversion — useful for **logging** or drift monitoring. The firmware does **not** currently **apply** a temperature correction to reported **Z** or to sweat conductivity. For comparability across sessions, **log temperature** (or ambient/skin proxy) and **avoid** comparing runs at very different thermal conditions without post-processing.
+
+### Summary
+
+The **largest practical systematic lever** under your control is **`rcalVal` matching the real RCAL** (and using a **tight-tolerance** RCAL on the board). **RTIA is switched during the sweep**, but **extreme |Z| vs gain** can still break points. Treat **SD** as **last sweep only** unless you change naming; treat **LMA outputs** as **model-dependent**; treat **temperature** as **uncorrected** in firmware today.
 
 ---
 
