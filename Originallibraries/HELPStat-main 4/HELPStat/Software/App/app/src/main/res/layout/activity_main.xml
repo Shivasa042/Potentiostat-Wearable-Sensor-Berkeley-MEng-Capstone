@@ -54,11 +54,19 @@
         app:layout_constraintEnd_toEndOf="parent" />
 
     <Button
+        android:id="@+id/button_openDataViz"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/data_visualization_title"
+        app:layout_constraintBottom_toTopOf="@+id/button_openSettings"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <Button
         android:id="@+id/button_connect"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Connect"
-        app:layout_constraintBottom_toTopOf="@+id/button_openSettings"
+        app:layout_constraintBottom_toTopOf="@+id/button_openDataViz"
         app:layout_constraintEnd_toEndOf="parent" />
 
     <com.androidplot.xy.XYPlot

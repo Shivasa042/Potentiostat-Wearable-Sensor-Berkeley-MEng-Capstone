@@ -1,0 +1,17 @@
+{
+  "name": "HELPStat",
+  "short_name": "HELPStat",
+  "description": "BLE EIS companion for HELPStat — history by Pacific calendar day",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect fill='%230ea5e9' width='192' height='192' rx='24'/%3E%3Ctext x='96' y='120' text-anchor='middle' fill='white' font-size='88' font-family='system-ui'%3EH%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

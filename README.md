@@ -16,6 +16,8 @@ A portable Electrochemical Impedance Spectroscopy (EIS) system built around an *
   - [Scenario 2 — Standalone with Button + SD Card](#scenario-2--standalone-with-button--sd-card)
   - [Scenario 3 — Battery-Powered Wearable with BLE](#scenario-3--battery-powered-wearable-with-ble)
   - [Scenario 4 — Automated Data Collection (Python)](#scenario-4--automated-data-collection-python)
+- [Companion web app (`web/helpstat-app`)](#companion-web-app-webhelpstat-app)
+- [Native iOS app (`ios/HELPStatCompanion`)](#native-ios-app-ioshelpstatcompanion)
 - [Serial Command Reference](#serial-command-reference)
 - [Python Scripts](#python-scripts)
 - [Analyzing EIS Data (Nyquist and Bode)](#analyzing-eis-data-nyquist-and-bode)
@@ -32,7 +34,7 @@ A portable Electrochemical Impedance Spectroscopy (EIS) system built around an *
 1. **Generates a sinusoidal AC excitation** via the AD5940's waveform generator (WGTYPE_SIN).
 2. **Sweeps across a configurable frequency range** (default 1 Hz – 200 kHz) with a programmable number of points per decade.
 3. **Measures the complex impedance** (real, imaginary, magnitude, phase) at each frequency using the AD5940's on-chip DFT engine.
-4. **Outputs results** as CSV over USB serial, transmits via BLE to a phone app, and/or saves to an SD card.
+4. **Outputs results** as CSV over USB serial, transmits via BLE to the **web companion** (or other BLE clients), and/or saves to an SD card.
 5. **Calculates equivalent circuit parameters** (Rct, Rs) using a Levenberg-Marquardt fit.
 
 The system supports seven measurement modes (EIS is fully implemented; others are stub-ready):
@@ -58,7 +60,7 @@ The system supports seven measurement modes (EIS is fully implemented; others ar
 | **Electrodes** | 2-electrode configuration (CE0 + SE0) — no separate reference electrode needed |
 | **Interface** | SPI between ESP32-S3 and AD5940 |
 | **Storage** | MicroSD card slot (SPI) |
-| **Wireless** | BLE for real-time data streaming to a companion Android app |
+| **Wireless** | BLE streaming; **web** companion (`web/helpstat-app`), **native iOS** (`ios/HELPStatCompanion`), or legacy **Android** (`Originallibraries/`). |
 | **User Input** | Physical push-button on GPIO 7 |
 | **Indicator** | LED on GPIO 6 |
 | **Power** | USB-C or 3.7 V LiPo battery |
@@ -86,7 +88,11 @@ The system supports seven measurement modes (EIS is fully implemented; others ar
 │   ├── MEASUREMENT_MODES.md   # Detailed command format and parameter reference
 │   ├── NEW_FEATURES.md        # Implemented features (validation, averaging, etc.)
 │   └── IMPROVEMENTS.md        # Roadmap of AD5940 improvements from datasheet analysis
-├── Originallibraries/         # Reference copy of the original HELPStat Android app and library
+├── Originallibraries/         # Legacy Android BLE app (optional; not required for the web companion)
+├── web/
+│   └── helpstat-app/          # PWA-style companion (Web Bluetooth, Pacific-day history, plots)
+├── ios/
+│   └── HELPStatCompanion/     # Native SwiftUI iOS app (CoreBluetooth, same GATT + JSON history)
 ├── testing/                   # USB/serial capture, conversion, and plotting scripts
 │   ├── eis_sweep.py           # Clean EIS sweep script with Excel output
 │   ├── send_eis_sample.py     # CLI tool with --port, --start-hz, --end-hz, --out options
@@ -193,8 +199,8 @@ The board is designed to operate standalone — no USB cable or laptop required 
 4. On boot, the firmware automatically enters **wearable mode**:
    - An EIS sweep runs immediately on power-up.
    - After each sweep the firmware **waits** for the configured interval (default 5 minutes), then runs the next sweep, saves to SD card, and transmits via BLE.
-5. On your phone, open the **HELPStat companion app** (source in `Originallibraries/`) or any generic BLE terminal.
-6. Scan for BLE devices and connect to `HELPStat` to receive real-time impedance data.
+5. On a **phone or laptop**, use the **web companion** ([`web/helpstat-app`](#companion-web-app-webhelpstat-app)) in **Chrome** or **Edge** (Web Bluetooth), the **native iOS app** ([`ios/HELPStatCompanion`](#native-ios-app-ioshelpstatcompanion)) on iPhone, or any generic BLE terminal.
+6. Connect to the device named **`HELPStat`**. History and plots are stored **per Pacific calendar day** in the web app (and optionally in the legacy Android build under `Originallibraries/`).
 7. To change the sweep interval or disable auto-sweep, connect via serial and type:
    ```
    INTERVAL:120       — sweep every 2 minutes
@@ -234,6 +240,49 @@ python testing/replug_and_sweep.py
 ```
 
 Follow the on-screen prompts to unplug and replug the USB cable. Data is saved to `eis_sweep_data.xlsx`.
+
+---
+
+## Companion web app (`web/helpstat-app`)
+
+This is the **maintained** phone- and laptop-friendly UI: **Live** (connect, optional sweep parameters, run), **History** (pick a **Pacific** calendar day and sweep, Nyquist + Bode), and **About** (platform notes). Data is grouped **by day** using `America/Los_Angeles` (PST/PDT). Each completed sweep (when **Rs** is received over BLE) is appended to that day in **IndexedDB**. You can **export** / **import** JSON to move history between devices.
+
+### Run locally (required for Web Bluetooth)
+
+Browsers only expose Bluetooth from a **secure context** (HTTPS or `http://localhost`):
+
+```bash
+cd web/helpstat-app
+python -m http.server 8080
+```
+
+Open `http://localhost:8080/`. Use **Chrome** or **Edge** on **Windows, macOS, Linux, or Android**.
+
+### iPhone: web vs native
+
+- The **web app cannot use Bluetooth on iPhone** (no Web Bluetooth in Safari or Chrome on iOS). For **live** BLE on iPhone, use the **native iOS project** below.
+- You can still use the web UI on iPhone for **viewing** data: **Add to Home Screen**, then **History → Import** JSON from another device.
+
+### Legacy Android project
+
+An older Kotlin app still lives under `Originallibraries/` if you need a native Android build; it is **not** required for the web companion.
+
+---
+
+## Native iOS app (`ios/HELPStatCompanion`)
+
+SwiftUI + **CoreBluetooth** companion for iPhone/iPad: **Live** (scan for `HELPStat`, connect, optional parameters, run sweep), **History** (Pacific calendar days, Nyquist + Bode via **Swift Charts**), **About**. Completed sweeps are saved as JSON under Application Support (`helpstat_history/YYYY-MM-DD.json`), compatible with **export/import** from the web app.
+
+### Open in Xcode
+
+1. On a Mac, install [Xcode](https://developer.apple.com/xcode/) (15+ recommended).
+2. Open `ios/HELPStatCompanion/HELPStatCompanion.xcodeproj`.
+3. Select your **Team** in **Signing & Capabilities** (target **HELPStatCompanion**). Change **Bundle Identifier** if it conflicts with an existing app ID.
+4. Add a **1024×1024** App Icon in `Assets.xcassets` → **AppIcon** before archiving for TestFlight / App Store (the catalog ships with a placeholder slot).
+
+### App Store
+
+The project is set up for standard **automatic signing**. To distribute: **Product → Archive**, then upload via **Organizer**. You must have an **Apple Developer Program** membership.
 
 ---
 
@@ -447,7 +496,7 @@ Detailed technical documentation is in the `docs/` folder:
 - **[docs/NEW_FEATURES.md](docs/NEW_FEATURES.md)** — Implemented improvements: data validation, gain hysteresis, averaging, temperature sensing, notch filter, auto-gain selection.
 - **[docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md)** — Future improvement roadmap based on AD5940/AD5941 datasheet analysis (sequencer, FIFO, power management, etc.).
 
-The original HELPStat Android companion app source code and library are preserved in `Originallibraries/` for reference.
+BLE companions: **`web/helpstat-app`** (desktop/Android Chrome), **`ios/HELPStatCompanion`** (native iPhone/iPad), and the legacy Android tree in **`Originallibraries/`**.
 
 ---
 

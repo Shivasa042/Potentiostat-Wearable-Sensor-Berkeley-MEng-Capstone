@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">HELPStat</string>
+    <string name="data_visualization_title">Data visualization</string>
+    <string name="pst_day">Day (Pacific)</string>
+    <string name="sweep">Sweep</string>
+    <string name="no_saved_days">No saved data yet</string>
+    <string name="no_sweeps_this_day">No sweeps</string>
+    <string name="sweep_number_time">#%1$d — %2$s</string>
+    <string name="rct_rs_line">Rct: %1$s Ω   Rs: %2$s Ω</string>
+    <string name="connect_and_run_hint">Run a measurement from the main screen; completed sweeps save by Pacific calendar day.</string>
 </resources>
