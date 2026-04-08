@@ -89,7 +89,15 @@ uint32_t AD5940_ClrMCUIntFlag() {
 }
 
 uint32_t AD5940_GetMCUIntFlag() {
+#if AFE_USE_HARDWARE_IRQ_GPIO
     return uCInterrupt;
+#else
+    /* Final Akshay PCB: AD5941 GPIO0 is not routed to the MCU; DFT-ready is read via SPI. */
+    if (uCInterrupt) {
+        return 1;
+    }
+    return AD5940_INTCTestFlag(AFEINTC_1, AFEINTSRC_DFTRDY) ? 1u : 0u;
+#endif
 }
 
 uint32_t AD5940_MCUResourceInit() {
@@ -100,12 +108,14 @@ uint32_t AD5940_MCUResourceInit() {
     pinMode(CS, OUTPUT);
     pinMode(RESET, OUTPUT);
 
-    /* DOUBLE CHECK IF CHOSEN INTERRUPT CAN HAVE INPUT PULLUP */
+#if AFE_USE_HARDWARE_IRQ_GPIO
+    /* HELPStat V2: AFE GPIO0 -> ESP32 interrupt pin (falling edge sets uCInterrupt). */
     pinMode(ESP32_INTERRUPT, INPUT_PULLUP);
-    
-    // Initializing Interrupts 
-    // AD5940 does FALLING interrupts by default
     attachInterrupt(digitalPinToInterrupt(ESP32_INTERRUPT), interruptISR, FALLING);
+#else
+    /* No wire to ESP32: leave pin as input (unused) to avoid floating-drive issues. */
+    pinMode(ESP32_INTERRUPT, INPUT_PULLUP);
+#endif
 
     // Sets Reset and CS pins high as a default
     AD5940_RstSet();

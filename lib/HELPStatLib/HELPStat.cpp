@@ -30,11 +30,20 @@
     SOFTWARE.
 */
 #include <HELPStat.h>
+#include <eis_board_ui.h>
 #include <math.h>
 #include <cmath>
 
 #ifndef MATH_PI
 #define MATH_PI 3.14159265358979323846
+#endif
+
+#if defined(BOARD_EIS_PCB_AKSHAY)
+#define EIS_UI_SWEEP_POINT()                                                                   \
+  eis_board_ui_sweep_point(_startFreq, _endFreq, _currentFreq, (uint32_t)_sweepCfg.SweepIndex, \
+                           (uint32_t)_sweepCfg.SweepPoints)
+#else
+#define EIS_UI_SWEEP_POINT() ((void)0)
 #endif
 
 HELPStat::HELPStat() {}
@@ -971,6 +980,7 @@ void HELPStat::AD5940_DFTMeasure(void) {
 
   eisArr[_sweepCfg.SweepIndex + (_currentCycle * _sweepCfg.SweepPoints)] = eis;
 
+  EIS_UI_SWEEP_POINT();
   logSweep(&_sweepCfg, &_currentFreq);
   if(_sweepCfg.SweepEn == bTRUE) {
     configureFrequency(_currentFreq);
@@ -1003,8 +1013,8 @@ bool HELPStat::pollDFT(int32_t* pReal, int32_t* pImage) {
     if (millis() - t0 > kTimeoutMs) {
       Serial.println(
           "ERROR: DFT poll timeout (~30 s). Check: (1) load between CE0 and SE0 "
-          "(e.g. 1 kOhm for bench), (2) AFE GPIO0 wired to ESP32 interrupt pin, "
-          "(3) SPI CS / AFE reset match your PCB (see constants.h).");
+          "(e.g. 1 kOhm for bench), (2) SPI CS / AFE reset match your PCB (constants.h); "
+          "on boards with AFE GPIO0->MCU use AFE_USE_HARDWARE_IRQ_GPIO=1.");
       *pReal = 0;
       *pImage = 0;
       AD5940_ClrMCUIntFlag();
@@ -2118,6 +2128,7 @@ void HELPStat::AD5940_DFTMeasureEIS(void) {
   eisArr[_sweepCfg.SweepIndex + (_currentCycle * _sweepCfg.SweepPoints)] = eis; 
 
   /* Updating Frequency */
+  EIS_UI_SWEEP_POINT();
   logSweep(&_sweepCfg, &_currentFreq);
 }
 
@@ -3581,6 +3592,7 @@ void HELPStat::AD5940_DFTMeasureWithAveraging(int numAverages) {
   }
 
   /* Must match AD5940_DFTMeasure: advance sweep and configure next frequency */
+  EIS_UI_SWEEP_POINT();
   logSweep(&_sweepCfg, &_currentFreq);
   if(_sweepCfg.SweepEn == bTRUE) {
     configureFrequency(_currentFreq);

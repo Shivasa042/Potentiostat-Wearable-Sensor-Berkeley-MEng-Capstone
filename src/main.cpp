@@ -32,6 +32,9 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include "HELPStat.h"
+#ifdef BOARD_EIS_PCB_AKSHAY
+#include "eis_board_ui.h"
+#endif
 #include <vector>
 #include <string>
 #include "esp_task_wdt.h"
@@ -72,9 +75,16 @@ static void loadRcalFromNVS(float& rcalOut, HELPStat& demo) {
 //#define HSDACGAIN_1                 0   /**< Gain is x1 */
 //#define HSDACGAIN_0P2               1   /**< Gain is x1/5 */
 
-/* Using I2C pins as GPIOs for buttons - Optional */
+/* Button / LED: HELPStat V2 (IO7/IO6). New EIS PCB: SW1 on IO13; no dedicated LED (use display). */
+#undef BUTTON
+#undef LEDPIN
+#if defined(BOARD_EIS_PCB_AKSHAY)
+#define BUTTON 13
+#define LEDPIN (-1)
+#else
 #define BUTTON 7
 #define LEDPIN 6
+#endif
 
 // Forward declaration
 void blinkLED(int cycles, bool state);
@@ -175,6 +185,9 @@ void parseSerialCommand() {
       Serial.println("SHOW - Display current settings");
       Serial.println("STATUS - Show measurement status");
       Serial.println("RCAL:ohms - Set RCAL & save to NVS (e.g. RCAL:98.7); RCAL:SHOW - print NVS/runtime");
+#if defined(BOARD_EIS_PCB_AKSHAY)
+      Serial.println("DISPLAYRANGE:min,max,value[,title] - show value in range on SPI display");
+#endif
       Serial.println("HELP - Show this help message");
       Serial.println("================================\n");
       return;
@@ -246,6 +259,41 @@ void parseSerialCommand() {
       demo.print_settings();
       return;
     }
+
+#if defined(BOARD_EIS_PCB_AKSHAY)
+    if (command.startsWith("DISPLAYRANGE:")) {
+      String rest = command.substring(13);
+      rest.trim();
+      float v0 = NAN, v1 = NAN, v2 = NAN;
+      int c0 = rest.indexOf(',');
+      int c1 = rest.indexOf(',', c0 + 1);
+      int c2 = rest.indexOf(',', c1 + 1);
+      if (c0 > 0 && c1 > c0) {
+        v0 = rest.substring(0, c0).toFloat();
+        v1 = rest.substring(c0 + 1, c1).toFloat();
+        if (c2 > c1) {
+          v2 = rest.substring(c1 + 1, c2).toFloat();
+        } else {
+          v2 = rest.substring(c1 + 1).toFloat();
+        }
+      }
+      const char *title = "Range";
+      if (c2 > c1) {
+        String t = rest.substring(c2 + 1);
+        t.trim();
+        static char titleBuf[48];
+        t.toCharArray(titleBuf, sizeof(titleBuf));
+        title = titleBuf;
+      }
+      if (isnan(v0) || isnan(v1) || isnan(v2)) {
+        Serial.println("Usage: DISPLAYRANGE:min,max,value  or  DISPLAYRANGE:min,max,value,title");
+      } else {
+        eis_board_ui_show_numeric_range(v0, v1, v2, title);
+        Serial.println("DISPLAYRANGE updated.");
+      }
+      return;
+    }
+#endif
 
     // RCAL:ohms — set calibration resistor value, persist to NVS (survives reboot)
     if (command.startsWith("RCAL:")) {
@@ -471,11 +519,17 @@ void setup() {
   
   demo.BLE_setup();
 
+#if LEDPIN >= 0
   pinMode(LEDPIN, OUTPUT);
-  pinMode(BUTTON, INPUT_PULLUP);
   digitalWrite(LEDPIN, HIGH);
-  
+#endif
+  pinMode(BUTTON, INPUT_PULLUP);
+
   demo.AD5940Start();
+
+#ifdef BOARD_EIS_PCB_AKSHAY
+  eis_board_ui_init();
+#endif
 
   {
     uint32_t chipid = AD5940_ReadReg(REG_AFECON_CHIPID);
@@ -554,7 +608,9 @@ void loop() {
 
   if (measurementRequested) {
     measurementRequested = false;
+#if LEDPIN >= 0
     digitalWrite(LEDPIN, LOW);
+#endif
 
     Serial.println("\n=== Starting Measurement ===");
     demo.print_settings();
@@ -611,20 +667,22 @@ void loop() {
 }
 
 void blinkLED(int cycles, bool state) {
-  if(state) 
-  {
+#if LEDPIN < 0
+  (void)cycles;
+  (void)state;
+  return;
+#else
+  if (state) {
     digitalWrite(LEDPIN, HIGH);
     delay(10);
-  }
-  else
-  {
-    for(int i = 0; i < cycles; i++)
-    {
-      digitalWrite(LEDPIN, HIGH); 
-      delay(1000); 
+  } else {
+    for (int i = 0; i < cycles; i++) {
+      digitalWrite(LEDPIN, HIGH);
+      delay(1000);
       digitalWrite(LEDPIN, LOW);
       delay(1000);
     }
   }
+#endif
 }
 

@@ -21,6 +21,11 @@ All improvements from the AD5940/AD5941 datasheet analysis have been implemented
 - **Why**: An **open** 2-electrode path (no load between **CE0**–**SE0**) or a **wrong CS / missing interrupt wire** could previously hang the sweep forever in `while (!AD5940_GetMCUIntFlag())`.
 - **Effect**: Serial prints `ERROR: DFT poll timeout`; higher-level code retries or records **NaN** for that point. See README **Known issues & mitigations**.
 
+### 1c. **New_EIS_PCB_Akshay (final layout) — SPI DFT-ready + display**
+- **Build**: PlatformIO `env:eis-pcb-akshay` (`-DBOARD_EIS_PCB_AKSHAY=1`). Sets **`AFE_USE_HARDWARE_IRQ_GPIO=0`**: `AD5940_GetMCUIntFlag()` also returns true when **`DFTRDY`** is set in the AFE INTC flags (SPI read), because **GPIO0 is not routed to the MCU** on that PCB.
+- **Pins**: SD **`CS_SD=40`** (was 21 on HELPStat V2); push-button **`SW1` → GPIO13**; SPI display **`/CS.SCREEN`→39, `/DC`→3, `/SCREEN.RST`→21** (default **ST7789** 240×280 in `src/eis_board_ui.cpp` — change driver/size if your FPC differs).
+- **Serial**: `DISPLAYRANGE:min,max,value` or `DISPLAYRANGE:min,max,value,title` updates the range bar on the display during development.
+
 ### 2. **Gain Switching with Hysteresis** ⭐ CRITICAL
 - **Function**: `setHSTIAWithHysteresis(float freq, float lastFreq)`
 - **What it does**: Prevents oscillation at gain boundaries using 10% hysteresis margin

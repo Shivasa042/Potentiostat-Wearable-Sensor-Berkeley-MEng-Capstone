@@ -1,6 +1,39 @@
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
 
+/*
+ * New_EIS_PCB_Akshay (KiCad, boards/New_EIS_PCB_Akshay): build with -DBOARD_EIS_PCB_AKSHAY=1
+ * (see platformio env:eis-pcb-akshay). Uses GPIO38 AFE CS, no AFE GPIO0->MCU line — firmware
+ * polls DFT-ready via SPI (AFE_USE_HARDWARE_IRQ_GPIO=0). SD card CS is on IO40 on that PCB.
+ */
+#if defined(BOARD_EIS_PCB_AKSHAY)
+#ifndef AFE_USE_HARDWARE_IRQ_GPIO
+#define AFE_USE_HARDWARE_IRQ_GPIO 0
+#endif
+#ifndef CS_SD
+#define CS_SD 40
+#endif
+#ifndef EIS_UI_TFT_CS
+#define EIS_UI_TFT_CS 39
+#endif
+#ifndef EIS_UI_TFT_DC
+#define EIS_UI_TFT_DC 3
+#endif
+#ifndef EIS_UI_TFT_RST
+#define EIS_UI_TFT_RST 21
+#endif
+#ifndef EIS_UI_DISPLAY_WIDTH
+#define EIS_UI_DISPLAY_WIDTH 240
+#endif
+#ifndef EIS_UI_DISPLAY_HEIGHT
+#define EIS_UI_DISPLAY_HEIGHT 280
+#endif
+#endif
+
+#ifndef AFE_USE_HARDWARE_IRQ_GPIO
+#define AFE_USE_HARDWARE_IRQ_GPIO 1
+#endif
+
 #define CLCK 240000000 / 16
 #define BITS MSBFIRST
 #define SPIMODE SPI_MODE0
