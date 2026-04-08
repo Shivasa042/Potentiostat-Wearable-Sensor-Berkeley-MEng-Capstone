@@ -295,7 +295,7 @@ class HELPStat {
         float _zeroVolt = 0.0;
         
         // Calibration Resistor 
-        float _rcalVal  = 1000.0f; // Default 1 kΩ RCAL (WatchScript / Linnes-style); measure with DMM; use 100 Ω only if that is what is populated
+        float _rcalVal  = 10000.0f; // Default 10 kΩ RCAL; measure with DMM for best accuracy
 
         // Delay
         uint32_t _delaySecs = 0.0; // Initialize w/ default values 

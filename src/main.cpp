@@ -110,7 +110,7 @@ float startFreq = 200000;
 float endFreq = 1;
 float biasVolt = 0.0; 
 float zeroVolt = 0.0; 
-float rcalVal = 1000.0f; // Match populated RCAL (1 kΩ recommended with this RTIA schedule); DMM + RCAL: / NVS. Use 100 Ω only if the board still has a 100 Ω part.
+float rcalVal = 10000.0f; // Match populated RCAL (10 kΩ); DMM + RCAL: / NVS.
 
 int extGain = 1; 
 int dacGain = 1; 
@@ -180,7 +180,7 @@ void parseSerialCommand() {
       Serial.println("  delaySecs: Delay between cycles (seconds)");
       Serial.println("  amplitude: Signal amplitude (mV, 0-800)");
       Serial.println("\nExamples:");
-      Serial.println("  EIS: MEASURE:0,200000,1,10,0,0,1000,1,1,127000,150,0,0,200");
+      Serial.println("  EIS: MEASURE:0,200000,1,10,0,0,10000,1,1,127000,150,0,0,200");
       Serial.println("  CV:  MEASURE:1,0,0,100,0.0,1.0,1000,1,1,0,0,1,0,50");
       Serial.println("SHOW - Display current settings");
       Serial.println("STATUS - Show measurement status");

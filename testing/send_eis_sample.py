@@ -119,7 +119,7 @@ def main() -> None:
             "10,"      # numPoints per decade
             "0.0,"     # biasVolt
             "0.0,"     # zeroVolt
-            "1000.0,"  # rcalVal (1 kΩ RCAL recommended with WatchScript-style RTIA schedule)
+            "10000.0,"  # rcalVal (10 kΩ RCAL)
             "1,"       # extGain
             "1,"       # dacGain
             "127000.0,"# rct_est

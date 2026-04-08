@@ -15,7 +15,7 @@ Portable Electrochemical Impedance Spectroscopy (EIS) system for real-time sweat
 | **Storage** | MicroSD card slot (FAT32, SPI) |
 | **Wireless** | BLE — web companion, iOS app, or legacy Android |
 | **Power** | USB-C or 3.7 V LiPo |
-| **RCAL** | On-board calibration resistor, default **1 kΩ** — used internally by the AFE for ratiometric impedance calculation (not the load) |
+| **RCAL** | On-board calibration resistor, default **10 kΩ** — used internally by the AFE for ratiometric impedance calculation (not the load) |
 
 ### Two Board Variants
 
@@ -124,7 +124,7 @@ MEASURE:mode,startFreq,endFreq,numPoints,biasVolt,zeroVolt,rcalVal,extGain,dacGa
 | 4 | numPoints | 10 | Points per decade |
 | 5 | biasVolt | 0.0 | DC bias (V) |
 | 6 | zeroVolt | 0.0 | Zero voltage (V) |
-| 7 | rcalVal | 1000 | Calibration resistor (Ω) — match your board's RCAL |
+| 7 | rcalVal | 10000 | Calibration resistor (Ω) — match your board's RCAL |
 | 8 | extGain | 1 | Excitation buffer gain (1=×2) |
 | 9 | dacGain | 1 | DAC gain (1=×1) |
 | 10 | rct_est | 127000 | Estimated Rct (Ω) — seed for LMA fit |
@@ -163,8 +163,8 @@ python testing/scenario1_serial_sample.py COM3 10000
 
 ### RCAL vs Load — What Each Does
 
-- **RCAL** (on-board, 1 kΩ default): An internal **reference** resistor. The AFE measures it at each frequency to calibrate its gain path. It is NOT the thing being measured. You never connect wires to RCAL — it's part of the chip's internal measurement circuit.
-- **Load** (between CE0 and SE0): The **unknown impedance** you are measuring. For bench testing this is a known resistor (e.g. 1 kΩ). For the wearable, this is **sweat on skin** between the two watch electrodes.
+- **RCAL** (on-board, 10 kΩ default): An internal **reference** resistor. The AFE measures it at each frequency to calibrate its gain path. It is NOT the thing being measured. You never connect wires to RCAL — it's part of the chip's internal measurement circuit.
+- **Load** (between CE0 and SE0): The **unknown impedance** you are measuring. For bench testing this is a known resistor (e.g. 10 kΩ). For the wearable, this is **sweat on skin** between the two watch electrodes.
 
 If there is **no conductive path** between CE0 and SE0 (open circuit, dry skin, electrodes not touching), the DFT engine gets no valid signal and times out — producing `NaN` results.
 
@@ -180,7 +180,7 @@ If there is **no conductive path** between CE0 and SE0 (open circuit, dry skin, 
 
 | Cause | Fix |
 |-------|-----|
-| **No load between CE0 and SE0** | For bench testing, place a **1 kΩ resistor** across CE0–SE0. For sweat sensing, ensure electrodes are in contact with moist skin. |
+| **No load between CE0 and SE0** | For bench testing, place a **known resistor** (e.g. 10 kΩ) across CE0–SE0. For sweat sensing, ensure electrodes are in contact with moist skin. |
 | **Dry skin / no sweat** | The watch electrodes need sweat (a conductive medium) to close the circuit. Run after exercise or apply a small drop of saline. |
 | **Wrong CS pin** | Verify `CS` in `constants.h` matches your PCB (38 for this project, 11 for HELPStat V2 Eagle). |
 | **Missing interrupt wire** (HELPStat V2 only) | AFE GPIO0 must be wired to MCU GPIO9. On the Akshay PCB, this isn't needed (uses SPI polling). |
