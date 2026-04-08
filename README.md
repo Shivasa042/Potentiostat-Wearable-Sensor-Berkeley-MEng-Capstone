@@ -88,7 +88,8 @@ The system supports seven measurement modes (EIS is fully implemented; others ar
 │   │   └── constants.h       # Pin definitions and constants
 │   └── Eigen/                 # Eigen C++ math library (used by LMA)
 ├── boards/
-│   └── custom_s3.json         # Custom PCB board definition for PlatformIO
+│   ├── custom_s3.json         # Custom PCB board definition for PlatformIO
+│   └── New_EIS_PCB_Akshay/    # KiCad 9 EIS PCB (eis_pcb.kicad_pro; schematic + 4-layer layout; fp/sym tables)
 ├── docs/
 │   ├── MEASUREMENT_MODES.md   # Detailed command format and parameter reference
 │   ├── NEW_FEATURES.md        # Implemented features (validation, averaging, etc.)
