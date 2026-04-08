@@ -397,7 +397,7 @@ class HELPStat {
         void AD5940_TDD(float startFreq, float endFreq, uint32_t numPoints, float biasVolt, float zeroVolt, float rcalVal, calHSTIA *gainArr, int gainArrSize, int extGain, int dacGain); // works
         
         void AD5940_DFTMeasure(void); // works
-        void pollDFT(int32_t* pReal, int32_t* pImage); // works
+        bool pollDFT(int32_t* pReal, int32_t* pImage);  // false on timeout (~30 s) or flag error
         void getDFT(int32_t* pReal, int32_t* pImage); // works
 
         /* Helper Functions */

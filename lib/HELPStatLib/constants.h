@@ -37,8 +37,9 @@
 #ifndef SCK
 #define SCK 36
 #endif
+/* AFE SPI chip select: this repo’s active bench target uses GPIO38. HELPStat_V2 Eagle uses GPIO11 — use -DCS=11 or edit here if your PCB matches the schematic. */
 #ifndef CS
-#define CS 11
+#define CS 38
 #endif
 #ifndef RESET
 #define RESET 10

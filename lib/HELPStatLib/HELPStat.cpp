@@ -902,7 +902,9 @@ void HELPStat::AD5940_DFTMeasure(void) {
     AD5940_Delay10us(delayUnits / 2 > 0 ? delayUnits / 2 : 1);
     AD5940_Delay10us(delayUnits / 2 > 0 ? delayUnits / 2 : 1);
 
-    pollDFT(&realRcal, &imageRcal);
+    if (!pollDFT(&realRcal, &imageRcal)) {
+      continue;
+    }
 
     AD5940_AFECtrlS(AFECTRL_ADCPWR|AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG, bFALSE);
 
@@ -920,7 +922,9 @@ void HELPStat::AD5940_DFTMeasure(void) {
     AD5940_Delay10us(delayUnits / 2 > 0 ? delayUnits / 2 : 1);
     AD5940_Delay10us(delayUnits / 2 > 0 ? delayUnits / 2 : 1);
 
-    pollDFT(&realRz, &imageRz);
+    if (!pollDFT(&realRz, &imageRz)) {
+      continue;
+    }
 
     AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG|AFECTRL_ADCPWR, bFALSE);
     AD5940_AFECtrlS(AFECTRL_HSTIAPWR|AFECTRL_INAMPPWR|AFECTRL_EXTBUFPWR|\
@@ -990,19 +994,36 @@ void HELPStat::getDFT(int32_t* pReal, int32_t* pImage) {
   // printf("Real: %d, Image: %d\n", *pReal, *pImage);
 }
 
-void HELPStat::pollDFT(int32_t* pReal, int32_t* pImage) {
-  /* Polls the DFT and retrieves the real and imaginary data as ints */
-  while(!AD5940_GetMCUIntFlag()) {
-    delay(1000); // Adding an empirical delay before polling again 
+bool HELPStat::pollDFT(int32_t* pReal, int32_t* pImage) {
+  /* Polls the DFT and retrieves the real and imaginary data as ints.
+   * Bounded wait: open cell / missing interrupt otherwise blocks forever. */
+  const unsigned long kTimeoutMs = 30000UL;
+  const unsigned long t0 = millis();
+  while (!AD5940_GetMCUIntFlag()) {
+    if (millis() - t0 > kTimeoutMs) {
+      Serial.println(
+          "ERROR: DFT poll timeout (~30 s). Check: (1) load between CE0 and SE0 "
+          "(e.g. 1 kOhm for bench), (2) AFE GPIO0 wired to ESP32 interrupt pin, "
+          "(3) SPI CS / AFE reset match your PCB (see constants.h).");
+      *pReal = 0;
+      *pImage = 0;
+      AD5940_ClrMCUIntFlag();
+      return false;
+    }
+    delay(10);
   }
-  
-  if(AD5940_INTCTestFlag(AFEINTC_1,AFEINTSRC_DFTRDY)) {
+
+  if (AD5940_INTCTestFlag(AFEINTC_1, AFEINTSRC_DFTRDY)) {
     getDFT(pReal, pImage);
     delay(300);
     AD5940_ClrMCUIntFlag();
     AD5940_INTCClrFlag(AFEINTSRC_DFTRDY);
+    return true;
   }
-  else Serial.println("Flag not working!");
+  Serial.println("Flag not working!");
+  *pReal = 0;
+  *pImage = 0;
+  return false;
 }
 
 void HELPStat::getMagPhase(int32_t real, int32_t image, float *pMag, float *pPhase) {
@@ -1991,7 +2012,10 @@ void HELPStat::AD5940_DFTMeasureEIS(void) {
   AD5940_Delay10us(delayUnitsEIS / 2 > 0 ? delayUnitsEIS / 2 : 1);
   AD5940_Delay10us(delayUnitsEIS / 2 > 0 ? delayUnitsEIS / 2 : 1);
 
-  pollDFT(&realRzRload, &imageRzRload);
+  if (!pollDFT(&realRzRload, &imageRzRload)) {
+    Serial.println("AD5940_DFTMeasureEIS: abort after Rz+Rload DFT timeout.");
+    return;
+  }
   AD5940_AFECtrlS(AFECTRL_ADCPWR|AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG, bFALSE);
 
   sw_cfg.Dswitch = SWD_SE0;
@@ -2009,7 +2033,10 @@ void HELPStat::AD5940_DFTMeasureEIS(void) {
   AD5940_Delay10us(delayUnitsEIS / 2 > 0 ? delayUnitsEIS / 2 : 1);
   AD5940_Delay10us(delayUnitsEIS / 2 > 0 ? delayUnitsEIS / 2 : 1);
 
-  pollDFT(&realRload, &imageRload);
+  if (!pollDFT(&realRload, &imageRload)) {
+    Serial.println("AD5940_DFTMeasureEIS: abort after Rload DFT timeout.");
+    return;
+  }
 
   AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG|AFECTRL_ADCPWR, bFALSE);
 
@@ -2029,7 +2056,10 @@ void HELPStat::AD5940_DFTMeasureEIS(void) {
   AD5940_Delay10us(delayUnitsEIS / 2 > 0 ? delayUnitsEIS / 2 : 1);
 
   /* Polling and retrieving data from the DFT */
-  pollDFT(&realRcal, &imageRcal);
+  if (!pollDFT(&realRcal, &imageRcal)) {
+    Serial.println("AD5940_DFTMeasureEIS: abort after RCAL DFT timeout.");
+    return;
+  }
 
   //wait for first data ready
   AD5940_AFECtrlS(AFECTRL_ADCPWR|AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG, bFALSE);  /* Stop ADC convert and DFT */
@@ -3460,7 +3490,9 @@ void HELPStat::AD5940_DFTMeasureWithAveraging(int numAverages) {
     AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
     AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
     AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-    pollDFT(&realRcal, &imageRcal);
+    if (!pollDFT(&realRcal, &imageRcal)) {
+      continue;
+    }
     AD5940_AFECtrlS(AFECTRL_ADCPWR|AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG, bFALSE);
     
     // Measure Rz
@@ -3478,7 +3510,9 @@ void HELPStat::AD5940_DFTMeasureWithAveraging(int numAverages) {
     AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
     AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
     AD5940_Delay10us((_waitClcks / 2) * (1/SYSCLCK));
-    pollDFT(&realRz, &imageRz);
+    if (!pollDFT(&realRz, &imageRz)) {
+      continue;
+    }
     AD5940_AFECtrlS(AFECTRL_ADCCNV|AFECTRL_DFT|AFECTRL_WG|AFECTRL_ADCPWR, bFALSE);
     AD5940_AFECtrlS(AFECTRL_HSTIAPWR|AFECTRL_INAMPPWR|AFECTRL_EXTBUFPWR|
                     AFECTRL_WG|AFECTRL_DACREFPWR|AFECTRL_HSDACPWR|

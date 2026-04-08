@@ -16,6 +16,11 @@ All improvements from the AD5940/AD5941 datasheet analysis have been implemented
 - **Usage**: Called from `AD5940_DFTMeasure()` (with retries) and `AD5940_DFTMeasureWithAveraging()` (only validated samples averaged)
 - **Benefit**: Prevents bad data from corrupting your measurements
 
+### 1b. **DFT poll timeout (open-cell / interrupt faults)**
+- **Function**: `pollDFT()` now returns `bool` and aborts after **~30 s** if the MCU interrupt from the AFE never arrives.
+- **Why**: An **open** 2-electrode path (no load between **CE0**–**SE0**) or a **wrong CS / missing interrupt wire** could previously hang the sweep forever in `while (!AD5940_GetMCUIntFlag())`.
+- **Effect**: Serial prints `ERROR: DFT poll timeout`; higher-level code retries or records **NaN** for that point. See README **Known issues & mitigations**.
+
 ### 2. **Gain Switching with Hysteresis** ⭐ CRITICAL
 - **Function**: `setHSTIAWithHysteresis(float freq, float lastFreq)`
 - **What it does**: Prevents oscillation at gain boundaries using 10% hysteresis margin

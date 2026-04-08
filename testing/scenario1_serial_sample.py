@@ -67,7 +67,22 @@ def main() -> int:
     ser = serial.Serial(port=port, baudrate=115200, timeout=2, write_timeout=2)
     time.sleep(0.3)
     ser.reset_input_buffer()
-    # Queue ASAP so the first parseSerialCommand() after a blocking sweep sees it before another auto-sweep arms.
+
+    # Serial commands are only handled in loop() after setup() finishes.
+    print("Waiting for firmware 'System ready' …")
+    ready_deadline = time.time() + 180.0
+    while time.time() < ready_deadline:
+        raw = ser.readline()
+        if not raw:
+            continue
+        s = raw.decode("utf-8", errors="replace").rstrip()
+        if s:
+            print(s)
+        if "System ready" in s:
+            break
+    else:
+        print("Timed out before System ready; continuing.", file=sys.stderr)
+
     ser.write(b"WEARABLE:OFF\n")
     ser.flush()
 

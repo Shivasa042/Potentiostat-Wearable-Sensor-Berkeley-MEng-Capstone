@@ -23,6 +23,7 @@ A portable Electrochemical Impedance Spectroscopy (EIS) system built around an *
 - [Python Scripts](#python-scripts)
 - [Analyzing EIS Data (Nyquist and Bode)](#analyzing-eis-data-nyquist-and-bode)
 - [Troubleshooting](#troubleshooting)
+- [Known issues & mitigations](#known-issues--mitigations)
 - [EIS accuracy, limitations, and best practices](#eis-accuracy-limitations-and-best-practices)
 - [Pin Configuration](#pin-configuration)
 - [Custom PCB Support](#custom-pcb-support)
@@ -477,37 +478,32 @@ Default pin assignments (defined in `lib/HELPStatLib/constants.h`):
 
 | Signal | GPIO | Description |
 |--------|------|-------------|
-| MOSI | 35 | SPI data out to AD5940 |
-| MISO | 37 | SPI data in from AD5940 |
+| MOSI | 35 | SPI data out to AD594x |
+| MISO | 37 | SPI data in from AD594x |
 | SCK | 36 | SPI clock |
-| CS | 11 | AD5940 chip select |
-| RESET | 10 | AD5940 reset |
-| INTERRUPT | 9 | AD5940 interrupt |
+| CS | **38** (this repo default) | AD594x chip select for the **current bench / capstone wiring** — **HELPStat V2** Eagle uses **GPIO11**; set **`#define CS 11`** or **`env:custom-board`** + **`-DCS=11`** if your PCB matches V2 |
+| RESET | 10 | AD594x reset |
+| INTERRUPT | 9 | AD594x interrupt (AFE `GPIO0` → MCU) |
 | CS_SD | 21 | SD card chip select |
 | BUTTON | 7 | Physical push-button (active LOW, internal pull-up) |
 | LED | 6 | Status indicator LED |
 
-Pins can be overridden via build flags in `platformio.ini`:
+**Do not** set **`-DMOSI`**, **`-DMISO`**, or **`-DSCK`** in `platformio.ini` on Arduino-ESP32 3.x (name clash with the core). Edit **`constants.h`** for those three. Optional safe override:
 
 ```ini
+; V2-schematic PCB (AFE CS on GPIO11), when constants.h still says CS 38:
 build_flags =
-    -DMOSI=35
-    -DMISO=37
-    -DSCK=36
     -DCS=11
-    -DRESET=10
-    -DESP32_INTERRUPT=9
-    -DCS_SD=21
 ```
 
 ---
 
 ## Custom PCB Support
 
-1. Copy `boards/custom_s3.json` and edit the flash size, VID/PID, and other parameters for your hardware.
-2. Select `env:custom-board` in `platformio.ini` or create a new environment.
-3. Override pin definitions using `-D` build flags (see above).
-4. Set `upload_port` and `monitor_port` for your board's COM port.
+1. Use **`boards/custom_s3.json`** (or edit **flash size** / partition scheme for your module).
+2. Build with **`env:custom-board`** (`board = custom_s3`). Pass **`--upload-port COMx`** on the CLI.
+3. Match **SPI / CS / RESET / interrupt** in **`constants.h`** to your schematic (see [Known issues & mitigations](#known-issues--mitigations)).
+4. Set **`upload_port`** / **`monitor_port`** in `platformio.ini` or override on the command line.
 
 ---
 
@@ -595,6 +591,44 @@ If the board runs **automatic sweeps about every 5 minutes**, **`WEARABLE:ON`** 
    Use **`testing/plot_eis_from_file.py`** on the cleaned CSV (or Excel) to inspect Nyquist and Bode.
 
 **Optional:** ML may help **downstream tasks** (classification, fusion), not basic cleanup.
+
+---
+
+## Known issues & mitigations
+
+Hardware/driver pitfalls from recent bring-up (Windows + ESP32-S3 **USB-Serial/JTAG** + bench wiring).
+
+### 1. Wrong AFE chip-select (`CS`) — boot hang or USB “dies”
+
+**Symptoms:** After flashing, the board **vanishes from Device Manager**, pyserial reports **`ClearCommError`** / **`WriteFile failed`**, or you never see **`System ready`**.
+
+**Cause:** `SPI.begin(..., CS)` uses **`CS`** in `lib/HELPStatLib/constants.h`. **HELPStat V2** (`Originallibraries/.../HELPStat_V2.sch`) ties **AD594x `!CS`** to **GPIO11**. Some lab or alternate layouts use **GPIO38** (or another pin).
+
+**Fix:** **`constants.h`** defaults to **`CS = 38`** for the wiring in use on this project’s board. If your PCB follows **HELPStat V2** (AFE CS on **GPIO11**), change **`#define CS`** to **11** or build with **`pio run -e custom-board`** and add **`-DCS=11`** under that environment. Rebuild and re-flash. If USB upload fails, use **download mode** (hold **BOOT**, plug USB, release) then upload.
+
+### 2. Windows USB after `esptool` reset
+
+**Symptom:** Upload succeeds, then the COM port misbehaves until **unplug/replug**.
+
+**Mitigation:** Replug USB once (README already notes this). Use **`testing/replug_and_sweep.py`** for a workflow that waits for replug before talking serial.
+
+### 3. EIS sweep slow or “stuck”
+
+**Open cell:** With **nothing** between **CE0** and **SE0**, DFT completion can fail. **`pollDFT()`** used to wait **indefinitely**; it now **times out after ~30 s**, prints **`ERROR: DFT poll timeout`**, and that point becomes **NaN** after validation.
+
+**Low frequency:** `settlingDelay()` waits **four excitation periods** per path (capped **10 s** per call). **`AD5940_DFTMeasureWithAveraging`** runs **multiple** settling passes per frequency → long sweeps at **1 Hz** and below are expected.
+
+**Serial blocked:** During **`runSweep()`**, **`loop()`** does not parse serial. Use **`WEARABLE:OFF`**, or **`testing/scenario1_serial_sample.py`** (waits for **`System ready`** first), or wait for **`Ready for next measurement`**.
+
+**Bench smoke test:** Place a **1 kΩ** resistor between **CE0** and **SE0**.
+
+### 4. Do not pass `-DMOSI` / `-DMISO` / `-DSCK` in `platformio.ini`
+
+On **Arduino-ESP32 3.x**, those macros **clash** with `pins_arduino.h` and **break the build**. Edit **`constants.h`** for MOSI/MISO/SCK. Optional: **`-DCS=11`** (or another GPIO) only.
+
+### 5. `boards/custom_s3.json` and `env:custom-board`
+
+Use **`board = custom_s3`** (not `custom_s3.json`). The JSON must include **`upload.maximum_size`** / **`flash_size`** for current PlatformIO (see repo file). **`env:custom-board`** sets USB CDC flags; adjust flash size if your module is not **4 MB**.
 
 ---
 
