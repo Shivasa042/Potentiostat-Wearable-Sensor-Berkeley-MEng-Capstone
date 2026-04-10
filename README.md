@@ -4,6 +4,22 @@ Portable Electrochemical Impedance Spectroscopy (EIS) system for real-time sweat
 
 ---
 
+## Contents
+
+1. [Hardware](#hardware)
+2. [Repository structure](#repository-structure)
+3. [Getting started](#getting-started)
+4. [Usage](#usage) — serial commands, **Command Prompt / PowerShell**, Python scripts, scenarios
+5. [Frequency range and sweep duration](#frequency-range-and-sweep-duration)
+6. [How EIS works on this board](#how-eis-works-on-this-board)
+7. [Errors, fixes, and known issues](#errors-fixes-and-known-issues)
+8. [Firmware features](#firmware-features)
+9. [Companion apps](#companion-apps) — BLE name, how to run web / iOS / Android
+10. [Pin configuration](#pin-configuration)
+11. [License](#license)
+
+---
+
 ## Hardware
 
 | Component | Details |
@@ -11,13 +27,13 @@ Portable Electrochemical Impedance Spectroscopy (EIS) system for real-time sweat
 | **MCU** | ESP32-S3 (240 MHz, Wi-Fi + BLE 5.0) |
 | **AFE** | AD5940 / AD5941 — waveform generator, DFT engine, programmable-gain TIA |
 | **Electrodes** | 2-electrode (CE0 + SE0), mounted on Apple Watch back-plate for sweat contact |
-| **SPI bus** | Shared: AFE (CS GPIO38), SD card (CS GPIO21 or 40), optional display |
+| **SPI bus** | Shared: AFE, SD card, and (Akshay PCB) ST7789 display — each device has its own CS |
 | **Storage** | MicroSD card slot (FAT32, SPI) |
 | **Wireless** | BLE — web companion, iOS app, or legacy Android |
 | **Power** | USB-C or 3.7 V LiPo |
 | **RCAL** | On-board calibration resistor, default **10 kΩ** — used internally by the AFE for ratiometric impedance calculation (not the load) |
 
-### Two Board Variants
+### Two board variants
 
 | | HELPStat V2 (bench/dev) | New_EIS_PCB_Akshay (final wearable) |
 |---|---|---|
@@ -26,27 +42,27 @@ Portable Electrochemical Impedance Spectroscopy (EIS) system for real-time sweat
 | SD CS | GPIO 21 | GPIO 40 |
 | Button | GPIO 7 | GPIO 13 |
 | LED | GPIO 6 | None (use display) |
-| Display | None | ST7789 240×280 SPI (CS 39, DC 3, RST 21) |
-| PSRAM | No | Yes (OPI) |
+| Display | None | ST7789 240×280 SPI (ER-TFT1.69-4) — see [Pin configuration](#pin-configuration) |
+| PSRAM | No | **Firmware uses internal RAM only** (`BOARD_HAS_PSRAM=0` in `eis-pcb-akshay`; avoids boot/USB instability when PSRAM does not init) |
 | PlatformIO env | `lab-board-cs38` | `eis-pcb-akshay` |
 
 KiCad 9 design files for the final PCB are in `boards/New_EIS_PCB_Akshay/`.
 
 ---
 
-## Repository Structure
+## Repository structure
 
 ```
 src/main.cpp                   Firmware entry point, serial commands, measurement loop
 src/eis_board_ui.cpp           SPI display driver for New_EIS_PCB_Akshay
 lib/HELPStatLib/               Core library (AD5940 driver, EIS sweep, BLE, SD, LMA fit)
   HELPStat.cpp/h               High-level sweep, BLE transmit, SD save
-  ad5940.c/h                    Low-level AD5940 register driver
-  ad594x.cpp                    MCU-side SPI, interrupt/poll, resource init
-  Impedance.c/h                 Impedance math helpers
-  lma.cpp/h                     Levenberg-Marquardt curve fitting (Rct, Rs)
-  constants.h                   Pin definitions, board-specific macros
-  eis_board_ui.h                Display UI header (C-linkage)
+  ad5940.c/h                   Low-level AD5940 register driver
+  ad594x.cpp                   MCU-side SPI, interrupt/poll, resource init
+  Impedance.c/h                Impedance math helpers
+  lma.cpp/h                    Levenberg-Marquardt curve fitting (Rct, Rs)
+  constants.h                  Pin definitions, board-specific macros
+  eis_board_ui.h               Display UI header (C-linkage)
 lib/Eigen/                     Eigen math library (used by LMA)
 boards/custom_s3.json          PlatformIO board definition
 boards/New_EIS_PCB_Akshay/     KiCad project (schematic + 4-layer PCB)
@@ -60,7 +76,7 @@ platformio.ini                 Build configuration
 
 ---
 
-## Getting Started
+## Getting started
 
 ### Prerequisites
 
@@ -68,17 +84,17 @@ platformio.ini                 Build configuration
 - **Python 3.8+** with `pip install -r requirements.txt` (for testing scripts)
 - **USB-C cable** to the board
 
-### Build and Flash
+### Build and flash
 
 1. Open this folder in VS Code. PlatformIO auto-detects `platformio.ini`.
 2. Connect the board via USB-C.
 3. Build and upload (from project root):
 
 ```bash
-# HELPStat V2 / bench board (CS=38):
+# HELPStat V2 / bench board (CS=38, SPI DFT polling — no AFE IRQ required):
 python -m platformio run -e lab-board-cs38 -t upload --upload-port COM3
 
-# New EIS PCB (Akshay):
+# New EIS PCB (Akshay) — display + SD CS=40:
 python -m platformio run -e eis-pcb-akshay -t upload --upload-port COM3
 ```
 
@@ -92,7 +108,9 @@ Replace `COM3` with your actual port. Close any serial monitor before uploading.
 
 ## Usage
 
-### Serial Commands (115200 baud, newline-terminated)
+All serial traffic is **115200 baud**, commands end with a **newline** (`\n` or `\r\n`).
+
+### Command summary
 
 | Command | Description |
 |---------|-------------|
@@ -106,11 +124,11 @@ Replace `COM3` with your actual port. Close any serial monitor before uploading.
 | `SET:<14 params>` | Set parameters without measuring |
 | `WEARABLE:ON` / `OFF` | Enable/disable automatic timed sweeps |
 | `INTERVAL:N` | Auto-sweep interval in seconds (min 10, default 300) |
-| `RCAL:ohms` | Set RCAL value and save to NVS (e.g. `RCAL:987.6`) |
+| `RCAL:ohms` | Set RCAL value and save to NVS (e.g. `RCAL:10000`) |
 | `RCAL:SHOW` | Print stored and runtime RCAL values |
 | `DISPLAYRANGE:min,max,val[,title]` | Update SPI display (Akshay PCB only) |
 
-### 14-Parameter Format
+### 14-parameter `MEASURE` format
 
 ```
 MEASURE:mode,startFreq,endFreq,numPoints,biasVolt,zeroVolt,rcalVal,extGain,dacGain,rct_est,rs_est,numCycles,delaySecs,amplitude
@@ -119,21 +137,67 @@ MEASURE:mode,startFreq,endFreq,numPoints,biasVolt,zeroVolt,rcalVal,extGain,dacGa
 | # | Parameter | Example | Notes |
 |---|-----------|---------|-------|
 | 1 | mode | 0 | 0=EIS, 1=CV, 2=IT, 3=CP, 4=DPV, 5=SWV, 6=OCP |
-| 2 | startFreq | 200000 | Hz (high end) |
-| 3 | endFreq | 1 | Hz (low end) |
-| 4 | numPoints | 10 | Points per decade |
+| 2 | startFreq | 200000 | Hz (often the high end of the sweep) |
+| 3 | endFreq | 1 | Hz (often the low end) |
+| 4 | numPoints | 10 | Points per decade (log sweep) |
 | 5 | biasVolt | 0.0 | DC bias (V) |
 | 6 | zeroVolt | 0.0 | Zero voltage (V) |
-| 7 | rcalVal | 10000 | Calibration resistor (Ω) — match your board's RCAL |
-| 8 | extGain | 1 | Excitation buffer gain (1=×2) |
-| 9 | dacGain | 1 | DAC gain (1=×1) |
-| 10 | rct_est | 127000 | Estimated Rct (Ω) — seed for LMA fit |
-| 11 | rs_est | 150 | Estimated Rs (Ω) — seed for LMA fit |
+| 7 | rcalVal | 10000 | Calibration resistor (Ohms) — match your board's RCAL |
+| 8 | extGain | 1 | Excitation buffer gain (1=x2) |
+| 9 | dacGain | 1 | DAC gain (1=x1) |
+| 10 | rct_est | 127000 | Estimated Rct (Ohms) — seed for LMA fit |
+| 11 | rs_est | 150 | Estimated Rs (Ohms) — seed for LMA fit |
 | 12 | numCycles | 0 | Repeat cycles |
 | 13 | delaySecs | 0 | Delay between cycles (s) |
-| 14 | amplitude | 200 | AC excitation (mV, 0–800) |
+| 14 | amplitude | 200 | AC excitation (mV, 0-800) |
 
-### Quick USB Test (Python)
+**Example — full-span sweep (200 kHz → 1 Hz, 5 pts/decade, 10 kΩ RCAL, 150 mV):**
+
+```
+MEASURE:0,200000,1,5,0.0,0.0,10000.0,1,1,127000.0,150.0,0,0,150
+```
+
+### Running an EIS sweep from Command Prompt or PowerShell (Windows)
+
+Windows does not include a serial terminal in `cmd.exe`. Use **Python + pyserial** (same as the repo's test scripts).
+
+1. **Install once:**
+
+```bash
+pip install pyserial
+```
+
+2. **Close anything else using the COM port** (VS Code Serial Monitor, another Python script, etc.).
+
+3. **Send a command and print the response** — adjust `COM3` and timeouts as needed. Long sweeps can take **many minutes**; increase the inner `while` time limit if needed.
+
+**Default firmware sample sweep (`MEASURE:SAMPLE`):**
+
+```powershell
+python -c "import serial,time; s=serial.Serial('COM3',115200,timeout=600); s.write(b'MEASURE:SAMPLE\r\n'); t=time.time();
+while time.time()-t<900:
+    line=s.readline()
+    if line: print(line.decode(errors='replace').rstrip())"
+```
+
+**Custom 14-parameter sweep** (same example as the table above):
+
+```powershell
+python -c "import serial,time; s=serial.Serial('COM3',115200,timeout=600); s.write(b'MEASURE:0,200000,1,5,0.0,0.0,10000.0,1,1,127000.0,150.0,0,0,150\r\n'); t=time.time();
+while time.time()-t<900:
+    line=s.readline()
+    if line: print(line.decode(errors='replace').rstrip())"
+```
+
+4. **Interactive alternative** — type commands by hand:
+
+```bash
+python -m platformio device monitor -p COM3 -b 115200
+```
+
+Then type `MEASURE:SAMPLE` or a full `MEASURE:0,...` line and press Enter.
+
+### Python scripts in `testing/`
 
 ```bash
 # Default 2-point sweep (10 kHz → 1 kHz):
@@ -143,15 +207,59 @@ python testing/scenario1_serial_sample.py COM3
 python testing/scenario1_serial_sample.py COM3 10000
 ```
 
-### Three Usage Scenarios
+### Three usage scenarios
 
-1. **Laptop + USB (development)** — Flash, open serial, send `MEASURE:SAMPLE`, read CSV from terminal or Python script.
-2. **Standalone (button + SD)** — Press button on GPIO 7 (or 13 on Akshay PCB). Results save to SD card at `/eis/sweep_1Hz_200kHz.csv`.
-3. **Wearable (BLE, battery)** — Send `WEARABLE:ON` once. Board auto-sweeps at the configured interval. Data available via BLE (web/iOS companion) and SD card.
+1. **Laptop + USB (development)** — Flash, open serial (or Command Prompt as above), send `MEASURE:SAMPLE`, read CSV from the terminal or a script.
+2. **Standalone (button + SD)** — Press button on GPIO 7 (bench) or GPIO 13 (Akshay). Results save to SD at `/eis/sweep_1Hz_200kHz.csv` (path/name set in firmware).
+3. **Wearable (BLE, battery)** — Send `WEARABLE:ON` once. Board auto-sweeps at the configured interval. Data via BLE (web/iOS) and SD card.
 
 ---
 
-## How EIS Works on This Board
+## Frequency range and sweep duration
+
+- **Practical sweep span in this firmware:** about **1 Hz – 200 kHz** (high end is what the code and gain schedule target; AD5941 family supports a similar band depending on clock and configuration).
+- **Number of frequency points** (log sweep, `startFreq > endFreq`):
+
+  `SweepPoints = (1.5 + (log10(startFreq) - log10(endFreq)) x numPoints) - 1`
+
+  Example: 200 kHz → 1 Hz at **5 points/decade** = **27 points**; at **10 points/decade** = **54 points**.
+
+- **Time per point** depends on frequency (settling + DFT). **Low Hz is slow** (several seconds per point is normal).
+
+### Measured sweep timings (New_EIS_PCB_Akshay, 10 kOhm load resistor)
+
+| Sweep | Points | Approx. duration | Notes |
+|-------|--------|-------------------|-------|
+| Single-point 200 kHz | 1 | ~2 s | Fastest; use small span trick (see below) |
+| Single-point 200 Hz | 1 | ~3 s | |
+| 200 kHz → 10 Hz, 5 pts/decade | 22 | ~30 s | Good for quick characterization |
+| 200 kHz → 1 Hz, 5 pts/decade | 27 | ~3-5 min | Full wearable range; last decade (10→1 Hz) dominates |
+| 200 kHz → 1 Hz, 10 pts/decade | 54 | ~8-15 min | High-resolution; expect USB timeouts on long runs |
+
+Low-frequency points (< 10 Hz) require many DFT cycles and take several seconds each. The 1 Hz point alone can take 15-30 seconds.
+
+### Sample measurement results (10 kOhm load resistor across CE0-SE0)
+
+| Test | Magnitude | Phase | Rct (fit) | Rs (fit) |
+|------|-----------|-------|-----------|----------|
+| 200 kHz single | ~335 Ohm | ~2.6 deg | — | — |
+| 200 Hz single | ~332 Ohm | ~0.05 deg | — | — |
+| 200 kHz → 10 Hz (22 pts) | 311-357 Ohm | -4 to +4 deg | 32.3 Ohm | 323.4 Ohm |
+| 200 kHz → 1 Hz (27 pts) | 312-350 Ohm | -3.6 to +3.5 deg | 25.9 Ohm | 322.1 Ohm |
+
+These values are from a bench test with a nominal 10 kOhm resistor (actual ~327 Ohm measured — the parallel combination of the 10 kOhm load with the AFE's internal RTIA/feedback path produces the observed lower magnitude).
+
+### Single-frequency caveat
+
+If **`startFreq` equals `endFreq`**, the sweep math yields **zero points** and the measurement hangs. For an effectively single frequency, use a **tiny span**, e.g. `200000` → `199000` with `numPoints=1`.
+
+### Long sweeps + USB
+
+On some PCs the ESP32-S3 **USB Serial/JTAG** link can **glitch or disconnect** during long runs. The firmware still **writes results to the SD card** when a card is present — check `/eis/` on the card if the serial stream stops early.
+
+---
+
+## How EIS works on this board
 
 1. AD5940 waveform generator outputs a sine wave at the target frequency through **CE0** (counter electrode).
 2. Current flows through the **load** (sweat between the two electrodes) and returns through **SE0** (sense electrode).
@@ -161,86 +269,172 @@ python testing/scenario1_serial_sample.py COM3 10000
 6. The firmware sweeps all frequencies, outputting CSV with columns: `Frequency(Hz), Real(Ohm), Imaginary(Ohm), Magnitude(Ohm), Phase(Degrees)`.
 7. A Levenberg-Marquardt fit estimates **Rct** (charge transfer resistance) and **Rs** (solution resistance).
 
-### RCAL vs Load — What Each Does
+### RCAL vs load — what each does
 
-- **RCAL** (on-board, 10 kΩ default): An internal **reference** resistor. The AFE measures it at each frequency to calibrate its gain path. It is NOT the thing being measured. You never connect wires to RCAL — it's part of the chip's internal measurement circuit.
-- **Load** (between CE0 and SE0): The **unknown impedance** you are measuring. For bench testing this is a known resistor (e.g. 10 kΩ). For the wearable, this is **sweat on skin** between the two watch electrodes.
+- **RCAL** (on-board, 10 kΩ default): An internal **reference** resistor. The AFE measures it at each frequency to calibrate its gain path. It is **not** the unknown under test. You do not wire CE0/SE0 to RCAL for normal EIS.
+- **Load** (between CE0 and SE0): The **unknown impedance** you are measuring. For bench testing this is often a known resistor. For the wearable, this is **sweat/skin** between the watch electrodes.
 
 If there is **no conductive path** between CE0 and SE0 (open circuit, dry skin, electrodes not touching), the DFT engine gets no valid signal and times out — producing `NaN` results.
 
 ---
 
-## Errors, Fixes, and Known Issues
+## Errors, fixes, and known issues
 
-### DFT Poll Timeout → NaN Results
+### DFT poll timeout → NaN results
 
-**Symptom:** `ERROR: DFT poll timeout (~30 s)` and all CSV values are `nan`.
-
-**Causes and fixes:**
+**Symptom:** `ERROR: DFT poll timeout (~30 s)` and CSV values are `nan`.
 
 | Cause | Fix |
 |-------|-----|
-| **No load between CE0 and SE0** | For bench testing, place a **known resistor** (e.g. 10 kΩ) across CE0–SE0. For sweat sensing, ensure electrodes are in contact with moist skin. |
-| **Dry skin / no sweat** | The watch electrodes need sweat (a conductive medium) to close the circuit. Run after exercise or apply a small drop of saline. |
-| **Wrong CS pin** | Verify `CS` in `constants.h` matches your PCB (38 for this project, 11 for HELPStat V2 Eagle). |
-| **Missing interrupt wire** (HELPStat V2 only) | AFE GPIO0 must be wired to MCU GPIO9. On the Akshay PCB, this isn't needed (uses SPI polling). |
+| **No load between CE0 and SE0** | Bench: place a **known resistor** across CE0-SE0. Wearable: moist contact / sweat path. |
+| **Dry skin / no sweat** | Electrodes need a conductive medium; saline drop for testing if needed. |
+| **Wrong AFE CS pin** | Match `CS` in `constants.h` to your PCB (38 for Akshay / this bench setup; 11 for HELPStat V2 Eagle). |
+| **Missing interrupt wire** (HELPStat V2 only) | AFE GPIO0 → MCU GPIO9. Akshay PCB uses **SPI polling** instead (`AFE_USE_HARDWARE_IRQ_GPIO=0` in `lab-board-cs38` / Akshay path). |
 
-### COM Port Issues (Windows)
+### PSRAM / boot loop / USB drops right after boot (Akshay env)
+
+**Symptom:** ROM prints `PSRAM ID read error` or serial **disconnects** mid-banner; `ClearCommError` / port errors in Python.
+
+**Fix:** Build **`eis-pcb-akshay`** with **PSRAM disabled** in `platformio.ini` (`board_build.psram_type = disabled`, `-DBOARD_HAS_PSRAM=0`). The chip may report embedded PSRAM in esptool while the ROM/app init still fails; **internal RAM** is enough for this firmware.
+
+### Display not showing anything (Akshay PCB — ST7789)
+
+**Symptom:** Firmware prints `eis_board_ui: display ready (ST7789)` but the screen is dark.
+
+| Cause | Fix |
+|-------|-----|
+| **Backlight not enabled** | GPIO 14 (ESP.PWM) drives Q3 N-FET gate to sink LED cathode. Firmware now drives GPIO 14 HIGH after display init. |
+| **FPC cable not seated** | The 18-pin 0.5 mm FPC connector (J13) has a flip-top ZIF latch. Ensure the cable is fully inserted and the latch is **closed**. |
+| **SPI bus contention** | Firmware deselects AD5941 (GPIO 38 HIGH) before display transactions. If issues persist, check solder joints on J13. |
+
+**Display backlight circuit (from KiCad):**
+
+```
++3V3 → R (0402 current limiter) → J13 pin 3 (LED anode)
+J13 pin 2 (LED cathode, /K) → Q3 drain (IRLML6344 N-FET)
+Q3 source → GND
+Q3 gate ← GPIO 14 (ESP.PWM)
+```
+
+The display is a **ER-TFT1.69-4** (BuyDisplay), 1.69" 240x280 IPS TFT, ST7789V controller, 4-wire SPI. Datasheet: [ER-TFT1.69-4](https://www.buydisplay.com/download/manual/ER-TFT1.69-4_Datasheet.pdf), [ST7789V IC](https://www.buydisplay.com/download/ic/ST7789.pdf).
+
+On boot, the firmware runs a diagnostic sequence: **3 backlight blinks** (GPIO 14 toggle), then fills **RED → GREEN → BLUE** (600 ms each), then displays **HELLO WORLD** in white text. If no blinks are visible, the issue is hardware (FPC cable, backlight circuit, or display module).
+
+### COM port issues (Windows)
 
 | Symptom | Fix |
 |---------|-----|
-| `PermissionError` / port busy | Another program holds the port (VS Code serial monitor, stuck Python script). Kill it first. |
-| Port disappears after flash | Unplug and re-plug USB once. Normal for ESP32-S3 USB-Serial/JTAG on first flash. |
+| `PermissionError` / port busy | Another program holds the port. Close Serial Monitor and kill stuck Python processes. |
+| Port disappears after flash | Unplug and re-plug USB once (common on ESP32-S3). |
 | Upload fails | Close serial monitor before uploading. |
 
-### Build Errors
+### Build errors
 
 | Error | Fix |
 |-------|-----|
-| `pio not recognized` | Use `python -m platformio run ...` instead. |
-| `#define CS` clash with Adafruit | Don't `#include "constants.h"` before Adafruit headers in display code. Already handled in `eis_board_ui.cpp`. |
-| `-DMOSI` / `-DMISO` / `-DSCK` | Do NOT pass these as build flags on Arduino-ESP32 3.x — they clash with `pins_arduino.h`. Edit `constants.h` instead. |
+| `pio not recognized` | Use `python -m platformio run ...` |
+| `#define CS` clash with Adafruit | Do not include `constants.h` before Adafruit headers in display code — already handled in `eis_board_ui.cpp`. |
+| `-DMOSI` / `-DMISO` / `-DSCK` build flags | Do **not** pass these on Arduino-ESP32 3.x — they clash with `pins_arduino.h`. Edit `constants.h` instead. |
 
-### EIS Data Quality
+### EIS data quality
 
 | Issue | Explanation |
 |-------|-------------|
 | `inf` magnitude | Open circuit or loose electrode connection. |
-| Jumps at certain frequencies | Gain switching boundary — 10% hysteresis is applied but extreme impedance mismatches can still cause artifacts. |
-| Fit Rct/Rs stuck at defaults | Poor data quality. Fix wiring and RCAL value first, then tune `rct_est`/`rs_est` seeds. |
-| Slow sweep at low frequencies | Normal. Settling delay is 4 excitation periods; at 1 Hz that's 4+ seconds per measurement point. |
+| Jumps at certain frequencies | RTIA gain switching; hysteresis helps but extreme mismatches can still show artifacts. |
+| Fit Rct/Rs stuck at defaults | Poor data; fix wiring and **RCAL** first, then tune `rct_est` / `rs_est`. |
+| Slow sweep at low frequencies | Normal — more cycles at low Hz. |
 
 ---
 
-## Firmware Features
+## Firmware features
 
-- **Data validation**: Bad DFT measurements (NaN, inf, out-of-range) are detected and retried (up to 4×) or recorded as NaN.
-- **DFT poll timeout**: 30-second timeout prevents infinite hangs on open circuit or missing interrupt.
-- **Gain hysteresis**: 10% frequency margin on RTIA switching prevents oscillation at band boundaries.
-- **Averaging**: Each frequency point is measured 3× (configurable) with only validated samples averaged.
-- **SPI DFT polling**: For PCBs without a hardware interrupt line (Akshay), the firmware polls the AFE's DFTRDY flag over SPI.
-- **RCAL in NVS**: `RCAL:` serial command stores your measured calibration resistor value in flash (survives reboot).
-- **Wearable auto-sweep**: Configurable timer-based automatic sweeps for standalone field deployment.
-- **Display UI** (Akshay PCB): Live sweep progress bar and numeric range display on ST7789 SPI screen.
-- **Temperature logging**: Reads AD5940 die temperature (approximate, not applied as correction).
+- **Data validation**: Bad DFT measurements (NaN, inf, out-of-range) are detected and retried (up to 4x) or recorded as NaN.
+- **DFT poll timeout**: ~30 s timeout prevents infinite hangs on open circuit or stuck interrupt path.
+- **Gain hysteresis**: 10% frequency margin on RTIA switching reduces oscillation at band boundaries.
+- **Averaging**: Each frequency point is measured multiple times with validated samples averaged.
+- **SPI DFT polling**: On PCBs without AFE→MCU interrupt (Akshay), DFTRDY is polled over SPI.
+- **RCAL in NVS**: `RCAL:` stores calibration value in flash (survives reboot).
+- **Wearable auto-sweep**: Timer-based sweeps for field use (`WEARABLE:ON`, `INTERVAL:N`).
+- **Display UI** (Akshay): Live sweep progress on ST7789; `DISPLAYRANGE` serial command for custom display.
+- **Display backlight** (Akshay): GPIO 14 PWM drives Q3 N-FET for backlight control; blink test on boot.
+- **Temperature logging**: AD5940 die temperature readout (approximate).
 
-See `docs/NEW_FEATURES.md` for full details.
+See `docs/NEW_FEATURES.md` for more detail.
 
 ---
 
-## Companion Apps
+## Companion apps
+
+**GitHub only stores source code.** Nothing is automatically "built" or hosted for you. You run each app locally (or deploy the web app to your own hosting). The firmware must be on the board and **BLE enabled** in the sketch for phone/browser connections to work.
 
 | Platform | Location | Notes |
 |----------|----------|-------|
-| **Web** (Chrome/Edge) | `web/helpstat-app/` | Web Bluetooth, runs from `localhost:8080`. No iPhone support (no Web Bluetooth in Safari). |
-| **iOS** (native) | `ios/HELPStatCompanion/` | SwiftUI + CoreBluetooth. Open `.xcodeproj` in Xcode 15+. |
-| **Android** (legacy) | `Originallibraries/` | Kotlin app, not actively maintained. |
+| **Web** (Chrome/Edge) | `web/helpstat-app/` | Static site + Web Bluetooth. Needs **HTTPS or localhost**. |
+| **iOS** (native) | `ios/HELPStatCompanion/` | Open in **Xcode**, build to a **physical iPhone** (recommended) or Simulator (BLE is limited). |
+| **Android** (legacy) | `Originallibraries/HELPStat-main 4/HELPStat/Software/App/` | Open in **Android Studio**, Gradle build. Not actively maintained. |
+
+### Bluetooth: advertised name, pairing, and which devices can connect
+
+- **Name you should see when scanning:** **`HELPStat`**. The firmware sets this in `BLEDevice::init("HELPStat")` in `lib/HELPStatLib/HELPStat.cpp`. The web app and iOS companion filter on that name (`web/helpstat-app/js/constants.js`, `ios/.../GattConstants.swift`). Some OS Bluetooth lists show only a generic "LE" device if the name packet is delayed; the companion apps still discover **`HELPStat`** once advertising is up.
+
+- **Not like a Bluetooth speaker.** The board exposes **Bluetooth Low Energy (BLE)** with a **custom GATT service** (primary service UUID **`4fafc201-1fb5-459e-8fcc-c5c9c331914b`**, defined with characteristics in `lib/HELPStatLib/HELPStat.h`). There is no standard "pair and any app works" profile for EIS data.
+
+- **Who can connect:** Any **phone, tablet, or PC** that runs **client software** implementing that GATT layout — this repo's **web** (Chrome/Edge + Web Bluetooth), **iOS HELPStatCompanion**, or **legacy Android** app — or **your own** app using the same UUIDs. Generic system "Pair new device" flows are not sufficient by themselves.
+
+- **Firmware:** `setup()` must call **`BLE_setup()`** (already the case in `src/main.cpp`). Without running firmware, nothing advertises as **`HELPStat`**.
+
+### Web app (`web/helpstat-app/`)
+
+1. **Why not double-click `index.html`?**
+   [Web Bluetooth](https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API) is restricted: browsers expect a **secure context** (**`https://`** or **`http://localhost`**). Opening the file as `file://` usually **will not** allow Bluetooth.
+
+2. **Serve the folder on localhost** (pick one):
+
+   ```bash
+   cd web/helpstat-app
+   python -m http.server 8080
+   ```
+
+   Then open **Chrome or Edge**: [http://localhost:8080](http://localhost:8080)
+
+3. Turn on the potentiostat board, ensure firmware is running with BLE (the repo enables `BLE_setup()` in `setup()`). Use the page's **Connect** / scan flow; grant Bluetooth permission when prompted.
+
+4. **iPhone Safari** does not support Web Bluetooth for this use case; use the **native iOS app** below.
+
+### iOS app (`ios/HELPStatCompanion/`)
+
+1. You need a **Mac** with **Xcode** (15+ as noted in the table; use a current Xcode that supports the project format).
+
+2. Open **`ios/HELPStatCompanion/HELPStatCompanion.xcodeproj`** in Xcode.
+
+3. Select a run destination:
+   - **Physical iPhone** (USB or wireless debugging): best for real BLE to the wearable.
+   - **Simulator**: CoreBluetooth behavior is limited; prefer a real device for end-to-end tests.
+
+4. Press **Run**. The first time, you may need to set your **Team** under Signing & Capabilities so Xcode can sign the app.
+
+5. Apple does **not** install apps from GitHub automatically; **TestFlight** or the **App Store** only happen if you create an Apple Developer distribution pipeline yourself.
+
+### Android app (legacy)
+
+1. Install **Android Studio** (current stable).
+
+2. **Open** the Gradle project at
+   `Originallibraries/HELPStat-main 4/HELPStat/Software/App/`
+   (the folder that contains the root `build.gradle.kts`).
+
+3. Let Gradle sync, connect a phone with **USB debugging**, or use an emulator (BLE on emulators is often unavailable or flaky).
+
+4. **Run** the app module from Android Studio.
+
+5. This tree is **legacy**; expect older SDK assumptions and possible migration work.
 
 ---
 
-## Pin Configuration
+## Pin configuration
 
-### HELPStat V2 / Bench Board
+### HELPStat V2 / bench board
 
 | Signal | GPIO | Notes |
 |--------|------|-------|
@@ -254,7 +448,7 @@ See `docs/NEW_FEATURES.md` for full details.
 | BUTTON | 7 | Push-button (active LOW) |
 | LED | 6 | Status LED |
 
-### New_EIS_PCB_Akshay (Final Wearable)
+### New_EIS_PCB_Akshay — MCU, SD, AFE
 
 | Signal | GPIO | Notes |
 |--------|------|-------|
@@ -265,11 +459,47 @@ See `docs/NEW_FEATURES.md` for full details.
 | RESET | 10 | AD5940 reset |
 | CS_SD | 40 | SD card chip select |
 | BUTTON | 13 | SW1 push-button |
-| TFT CS | 39 | Display chip select |
-| TFT DC | 3 | Display data/command |
-| TFT RST | 21 | Display reset |
 
-No hardware interrupt line from AFE; firmware uses `AFE_USE_HARDWARE_IRQ_GPIO=0` (SPI polling).
+### New_EIS_PCB_Akshay — display (ST7789, ER-TFT1.69-4)
+
+The display shares the **same SPI bus** (SCK, MOSI, MISO) as the AFE and SD; only **CS / DC / RST / BL** are display-specific.
+
+| Display signal | GPIO | KiCad net | J13 FPC pin | Notes |
+|----------------|------|-----------|-------------|-------|
+| **TFT CS** | 39 | /CS.SCREEN | 8 | Display chip select |
+| **TFT DC** | 3 | /DC | 7 | Data / command |
+| **TFT RST** | 21 | /SCREEN.RST | 11 | Display hardware reset |
+| **TFT BL** | 14 | /ESP.PWM | — (via Q3) | Backlight control — drives Q3 N-FET gate |
+| **SCK** | 36 | /SCLK | 9 | Shared with AFE / SD |
+| **MOSI** | 35 | /MOSI | 10 | Shared |
+| **MISO** | 37 | /MISO | — | Shared (not used by display) |
+
+**J13 FPC connector full pinout (18-pin, 0.5 mm pitch ZIF):**
+
+| Pin | Net | Function |
+|-----|-----|----------|
+| 1 | GND | Ground |
+| 2 | /K | LED cathode → Q3 drain (backlight) |
+| 3 | +3V3 (via R) | LED anode (backlight, current-limited) |
+| 4 | +3V3 | Display power |
+| 5 | GND | Ground |
+| 6 | GND | Ground |
+| 7 | /DC | Data/Command (GPIO 3) |
+| 8 | /CS.SCREEN | Chip select (GPIO 39) |
+| 9 | /SCLK | SPI clock (GPIO 36) |
+| 10 | /MOSI | SPI data (GPIO 35) |
+| 11 | /SCREEN.RST | Reset (GPIO 21) |
+| 12 | GND | Ground |
+| 13 | /CTP_SCL | Touch I2C clock (capacitive touch, optional) |
+| 14 | /CTP_SDA | Touch I2C data (capacitive touch, optional) |
+| 15 | /CTP_RST | Touch reset (GPIO 47) |
+| 16 | /CTP_INT | Touch interrupt (GPIO 48) |
+| 17 | +3V3 | Touch power |
+| 18 | GND | Ground |
+
+Panel: **240x280** IPS TFT, ST7789V controller, 4-wire SPI (see `src/eis_board_ui.cpp`).
+
+No dedicated AFE interrupt line; firmware uses SPI polling for DFT ready.
 
 ---
 

@@ -1,0 +1,8 @@
+=== EIS DATA CSV ===
+Frequency(Hz),Real(Ohm),Imaginary(Ohm),Magnitude(Ohm),Phase(Degrees)
+10.000000,nan,nan,nan,nan
+
+=== CALCULATED PARAMETERS ===
+Rct(Ohm),Rs(Ohm)
+127000.000000,150.000000
+=== END CSV ===

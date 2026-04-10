@@ -5,6 +5,7 @@
  */
 
 #include <Arduino.h>
+#include <SPI.h>
 #include <math.h>
 
 #if defined(BOARD_EIS_PCB_AKSHAY)
@@ -29,8 +30,16 @@
 #ifndef EIS_UI_DISPLAY_HEIGHT
 #define EIS_UI_DISPLAY_HEIGHT 280
 #endif
+#ifndef EIS_UI_TFT_BL
+#define EIS_UI_TFT_BL 14
+#endif
 
-static Adafruit_ST7789 s_tft((int8_t)EIS_UI_TFT_CS, (int8_t)EIS_UI_TFT_DC, (int8_t)EIS_UI_TFT_RST);
+/* SPI pins (must match KiCad / constants.h) */
+#define TFT_SPI_SCK  36
+#define TFT_SPI_MISO 37
+#define TFT_SPI_MOSI 35
+
+static Adafruit_ST7789 s_tft(&SPI, (int8_t)EIS_UI_TFT_CS, (int8_t)EIS_UI_TFT_DC, (int8_t)EIS_UI_TFT_RST);
 static bool s_ui_ok = false;
 
 extern "C" void eis_board_ui_init(void) {
@@ -38,13 +47,64 @@ extern "C" void eis_board_ui_init(void) {
     return;
   }
 
+  Serial.printf("eis_board_ui: init start  CS=%d DC=%d RST=%d BL=%d\n",
+                EIS_UI_TFT_CS, EIS_UI_TFT_DC, EIS_UI_TFT_RST, EIS_UI_TFT_BL);
+  Serial.printf("eis_board_ui: SPI pins  SCK=%d MOSI=%d MISO=%d\n",
+                TFT_SPI_SCK, TFT_SPI_MOSI, TFT_SPI_MISO);
+
+  /* Deselect AD5941 (CS=38) and screen before reconfiguring */
+  pinMode(38, OUTPUT);
+  digitalWrite(38, HIGH);
   pinMode(EIS_UI_TFT_CS, OUTPUT);
   digitalWrite(EIS_UI_TFT_CS, HIGH);
 
-  /* Uses global SPI after HELPStat called SPI.begin(SCK, MISO, MOSI, CS_AFE). */
+  /* Backlight: Q3 N-FET gate on ESP.PWM (GPIO14) sinks LED cathode /K. */
+  pinMode(EIS_UI_TFT_BL, OUTPUT);
+  digitalWrite(EIS_UI_TFT_BL, LOW);
+
+  /* Blink backlight 3x so user can visually confirm GPIO14 drives the LED */
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(EIS_UI_TFT_BL, HIGH);
+    delay(200);
+    digitalWrite(EIS_UI_TFT_BL, LOW);
+    delay(200);
+  }
+  Serial.println("eis_board_ui: backlight blink test done (3 blinks)");
+
+  /* Re-assert SPI pins explicitly before display init */
+  SPI.begin(TFT_SPI_SCK, TFT_SPI_MISO, TFT_SPI_MOSI, -1);
+
+  /* Init at a conservative 8 MHz first; ST7789 supports up to ~62 MHz */
+  s_tft.setSPISpeed(8000000);
   s_tft.init(EIS_UI_DISPLAY_WIDTH, EIS_UI_DISPLAY_HEIGHT);
   s_tft.setRotation(0);
+  s_tft.invertDisplay(true);
+  Serial.println("eis_board_ui: ST7789 init done, running color test...");
+
+  /* Turn on backlight */
+  digitalWrite(EIS_UI_TFT_BL, HIGH);
+
+  /* Bright color fills: RED, GREEN, BLUE, each 600 ms */
+  s_tft.fillScreen(ST77XX_RED);
+  Serial.println("eis_board_ui: filled RED");
+  delay(600);
+  s_tft.fillScreen(ST77XX_GREEN);
+  Serial.println("eis_board_ui: filled GREEN");
+  delay(600);
+  s_tft.fillScreen(ST77XX_BLUE);
+  Serial.println("eis_board_ui: filled BLUE");
+  delay(600);
+
+  /* Final: black with white text */
   s_tft.fillScreen(ST77XX_BLACK);
+  s_tft.setTextColor(ST77XX_WHITE);
+  s_tft.setTextSize(3);
+  s_tft.setCursor(20, 100);
+  s_tft.println("HELLO");
+  s_tft.setCursor(20, 140);
+  s_tft.println("WORLD");
+  Serial.println("eis_board_ui: wrote HELLO WORLD");
+
   s_ui_ok = true;
   Serial.println("eis_board_ui: display ready (ST7789)");
 }
