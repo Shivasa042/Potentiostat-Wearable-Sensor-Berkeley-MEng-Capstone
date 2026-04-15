@@ -35,10 +35,80 @@ function resetLive() {
   live.rs = null;
 }
 
+let sweepTimer = null;
+let sweepStartMs = 0;
+let expectedPoints = 0;
+
+function estimatePoints() {
+  const f0 = parseFloat($("in-f0").value) || 200000;
+  const f1 = parseFloat($("in-f1").value) || 1;
+  const ppd = parseFloat($("in-ppd").value) || 5;
+  const high = Math.max(f0, f1);
+  const low = Math.min(f0, f1);
+  if (low <= 0 || high <= 0) return 27;
+  return Math.max(1, Math.floor(1.5 + (Math.log10(high) - Math.log10(low)) * ppd) - 1);
+}
+
+function formatFreq(f) {
+  if (f >= 1e6) return `${(f / 1e6).toFixed(1)} MHz`;
+  if (f >= 1000) return `${(f / 1000).toFixed(1)} kHz`;
+  if (f >= 1) return `${f.toFixed(1)} Hz`;
+  return `${(f * 1000).toFixed(1)} mHz`;
+}
+
+function formatElapsed(ms) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function updateProgress() {
+  const received = live.listFreq.length;
+  const elapsed = Date.now() - sweepStartMs;
+  const pct = expectedPoints > 0 ? Math.min(100, Math.round((received / expectedPoints) * 100)) : 0;
+
+  $("progress-fill").style.width = `${pct}%`;
+
+  let status;
+  if (received === 0) {
+    status = `Waiting for first point\u2026 ${formatElapsed(elapsed)} elapsed`;
+  } else {
+    const lastFreq = live.listFreq[received - 1];
+    status = `Point ${received}/${expectedPoints} \u00b7 ${formatFreq(lastFreq)} \u00b7 ${formatElapsed(elapsed)}`;
+  }
+  $("progress-text").textContent = status;
+}
+
+function startProgress() {
+  stopProgress();
+  expectedPoints = estimatePoints();
+  sweepStartMs = Date.now();
+  $("sweep-progress").hidden = false;
+  $("progress-fill").style.width = "0%";
+  updateProgress();
+  sweepTimer = setInterval(updateProgress, 1000);
+}
+
+function stopProgress(final) {
+  if (sweepTimer) {
+    clearInterval(sweepTimer);
+    sweepTimer = null;
+  }
+  if (final) {
+    const elapsed = Date.now() - sweepStartMs;
+    const n = live.listFreq.length;
+    $("progress-fill").style.width = "100%";
+    $("progress-text").textContent = `Complete \u2014 ${n} points in ${formatElapsed(elapsed)}`;
+  }
+}
+
 function onBleNotify(key, value) {
   if (key === "real") live.listReal.push(floatFromBytes(value));
   else if (key === "imag") live.listImag.push(floatFromBytes(value));
-  else if (key === "currFreq") live.listFreq.push(floatFromBytes(value));
+  else if (key === "currFreq") {
+    live.listFreq.push(floatFromBytes(value));
+    updateProgress();
+  }
   else if (key === "phase") {
     let ph = floatFromBytes(value);
     if (ph > 180) ph -= 360;
@@ -77,6 +147,7 @@ async function finalizeSweep() {
     points,
   };
   await appendSweep(sweep);
+  stopProgress(true);
   $("live-status").textContent = `Saved sweep (${sweep.pstTimeLabel})`;
   await refreshHistorySelectors();
   $("sel-day").value = sweep.pstDateKey;
@@ -243,11 +314,14 @@ async function main() {
 
   $("btn-sweep").addEventListener("click", async () => {
     resetLive();
-    $("live-status").textContent = "Sweep running…";
+    $("live-status").textContent = "Sweep running\u2026";
+    startProgress();
     try {
       await ble.runSweep(readSweepOptionsFromForm());
     } catch (e) {
       console.error(e);
+      stopProgress(false);
+      $("sweep-progress").hidden = true;
       $("live-status").textContent = String(e.message || e);
     }
   });
