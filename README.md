@@ -421,7 +421,7 @@ See `docs/NEW_FEATURES.md` for more detail.
 | Tab | Function |
 |-----|----------|
 | **Live** | Connect to the board via BLE, optionally adjust sweep parameters, and click **Run sweep** to trigger an EIS measurement. Incoming data streams in real-time over BLE notifications. When the sweep completes (the firmware sends back Rct and Rs fit values), it is automatically saved and the view switches to History. |
-| **History** | Browse all saved sweeps organized by **Pacific calendar day** (America/Los_Angeles timezone). Select a day and sweep to view **Nyquist** (Zreal vs Zimag), **Bode magnitude** (|Z| vs log frequency), and **Bode phase** (phase vs log frequency) plots rendered with Chart.js. Export any day's data as JSON, or import JSON from another device. |
+| **History** | Browse all saved sweeps organized by **Pacific calendar day** (America/Los_Angeles timezone). Select a day and sweep to view **Nyquist** (Zreal vs Zimag), **Bode magnitude** (|Z| vs log frequency), and **Bode phase** (phase vs log frequency) plots rendered with Chart.js. **Export JSON** downloads the whole day; **Export CSV** downloads the **selected sweep** as spreadsheet-friendly columns (same layout as serial CSV). Import JSON from another device. |
 | **About** | Platform compatibility notes and links back to this README. |
 
 #### Data flow
@@ -438,10 +438,10 @@ Board (firmware)  ──BLE GATT notifications──►  PHEW (browser)
                                                   │
                                         ┌─────────┴─────────┐
                                         ▼                   ▼
-                                   Chart.js plots     Export JSON file
+                                   Chart.js plots     Export JSON / CSV
 ```
 
-All data is stored **locally in your browser** (IndexedDB). Nothing is sent to any server. Clearing browser data removes saved sweeps — use **Export JSON** to keep a backup.
+All data is stored **locally in your browser** (IndexedDB). Nothing is sent to any server. Clearing browser data removes saved sweeps — use **Export JSON** (full day backup) or **Export CSV** (single sweep for Excel, Python, or comparison with firmware serial logs) to keep copies offline.
 
 #### Default sweep parameters (match firmware)
 
@@ -493,7 +493,8 @@ You can override any field before clicking **Run sweep**. Leave a field blank to
 
 7. **Review and export:**
    - Use the **Day** and **Sweep** dropdowns to browse past measurements.
-   - Click **Export JSON** to download the day's data as a `phew_YYYY-MM-DD.json` file.
+   - Click **Export JSON** to download the **entire day's** data as `phew_YYYY-MM-DD.json` (all sweeps in one file).
+   - Click **Export CSV** to download **only the sweep currently selected** in the Sweep dropdown as `phew_YYYY-MM-DD_sweepN.csv`. The file has a header row `Frequency(Hz),Real(Ohm),Imaginary(Ohm),Magnitude(Ohm),Phase(Degrees)` followed by one row per point, then a short footer with fitted **Rct** and **Rs** — aligned with the CSV-style output from the firmware over serial.
    - Use the **Import** button to load JSON exported from another machine or session.
 
 8. **When finished,** press Ctrl+C in the terminal to stop the local server.
