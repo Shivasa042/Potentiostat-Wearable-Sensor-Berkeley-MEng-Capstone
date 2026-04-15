@@ -14,7 +14,7 @@ Portable Electrochemical Impedance Spectroscopy (EIS) system for real-time sweat
 6. [How EIS works on this board](#how-eis-works-on-this-board)
 7. [Errors, fixes, and known issues](#errors-fixes-and-known-issues)
 8. [Firmware features](#firmware-features)
-9. [Companion apps](#companion-apps) — BLE name, how to run web / iOS / Android
+9. [Companion apps](#companion-apps) — **PHEW web app**, iOS, Android; BLE setup and usage
 10. [Pin configuration](#pin-configuration)
 11. [License](#license)
 
@@ -68,7 +68,7 @@ boards/custom_s3.json          PlatformIO board definition
 boards/New_EIS_PCB_Akshay/     KiCad project (schematic + 4-layer PCB)
 docs/                          Technical docs (features, modes, improvements)
 testing/                       Python scripts for serial capture, plotting
-web/helpstat-app/              Web BLE companion (Chrome/Edge)
+web/helpstat-app/              PHEW web companion app (Chrome/Edge, Web Bluetooth)
 ios/HELPStatCompanion/         Native iOS BLE companion (SwiftUI)
 Originallibraries/             Legacy HELPStat reference (Android app, original firmware, Eagle PCB)
 platformio.ini                 Build configuration
@@ -384,37 +384,118 @@ See `docs/NEW_FEATURES.md` for more detail.
 
 | Platform | Location | Notes |
 |----------|----------|-------|
-| **Web** (Chrome/Edge) | `web/helpstat-app/` | Static site + Web Bluetooth. Needs **HTTPS or localhost**. |
+| **PHEW Web App** (Chrome/Edge) | `web/helpstat-app/` | Static site + Web Bluetooth. Needs **HTTPS or localhost**. |
 | **iOS** (native) | `ios/HELPStatCompanion/` | Open in **Xcode**, build to a **physical iPhone** (recommended) or Simulator (BLE is limited). |
 | **Android** (legacy) | `Originallibraries/HELPStat-main 4/HELPStat/Software/App/` | Open in **Android Studio**, Gradle build. Not actively maintained. |
 
 ### Bluetooth: advertised name, pairing, and which devices can connect
 
-- **Name you should see when scanning:** **`HELPStat`**. The firmware sets this in `BLEDevice::init("HELPStat")` in `lib/HELPStatLib/HELPStat.cpp`. The web app and iOS companion filter on that name (`web/helpstat-app/js/constants.js`, `ios/.../GattConstants.swift`). Some OS Bluetooth lists show only a generic "LE" device if the name packet is delayed; the companion apps still discover **`HELPStat`** once advertising is up.
+- **Name you should see when scanning:** **`HELPStat`**. The firmware sets this in `BLEDevice::init("HELPStat")` in `lib/HELPStatLib/HELPStat.cpp`. The PHEW web app and iOS companion filter on that name (`web/helpstat-app/js/constants.js`, `ios/.../GattConstants.swift`). Some OS Bluetooth lists show only a generic "LE" device if the name packet is delayed; the companion apps still discover **`HELPStat`** once advertising is up.
 
 - **Not like a Bluetooth speaker.** The board exposes **Bluetooth Low Energy (BLE)** with a **custom GATT service** (primary service UUID **`4fafc201-1fb5-459e-8fcc-c5c9c331914b`**, defined with characteristics in `lib/HELPStatLib/HELPStat.h`). There is no standard "pair and any app works" profile for EIS data.
 
-- **Who can connect:** Any **phone, tablet, or PC** that runs **client software** implementing that GATT layout — this repo's **web** (Chrome/Edge + Web Bluetooth), **iOS HELPStatCompanion**, or **legacy Android** app — or **your own** app using the same UUIDs. Generic system "Pair new device" flows are not sufficient by themselves.
+- **Who can connect:** Any **phone, tablet, or PC** that runs **client software** implementing that GATT layout — this repo's **PHEW web app** (Chrome/Edge + Web Bluetooth), **iOS HELPStatCompanion**, or **legacy Android** app — or **your own** app using the same UUIDs. Generic system "Pair new device" flows are not sufficient by themselves.
 
 - **Firmware:** `setup()` must call **`BLE_setup()`** (already the case in `src/main.cpp`). Without running firmware, nothing advertises as **`HELPStat`**.
 
-### Web app (`web/helpstat-app/`)
+### PHEW Web App (`web/helpstat-app/`)
+
+**PHEW** (Portable Health & Electrochemical Wearable) is the browser-based companion for this potentiostat. It connects to the board over **Bluetooth Low Energy**, lets you configure and trigger EIS sweeps, and visualizes results with interactive charts — all from a single static webpage with no server or installation required beyond a local file server.
+
+#### What the app does
+
+| Tab | Function |
+|-----|----------|
+| **Live** | Connect to the board via BLE, optionally adjust sweep parameters, and click **Run sweep** to trigger an EIS measurement. Incoming data streams in real-time over BLE notifications. When the sweep completes (the firmware sends back Rct and Rs fit values), it is automatically saved and the view switches to History. |
+| **History** | Browse all saved sweeps organized by **Pacific calendar day** (America/Los_Angeles timezone). Select a day and sweep to view **Nyquist** (Zreal vs Zimag), **Bode magnitude** (|Z| vs log frequency), and **Bode phase** (phase vs log frequency) plots rendered with Chart.js. Export any day's data as JSON, or import JSON from another device. |
+| **About** | Platform compatibility notes and links back to this README. |
+
+#### Data flow
+
+```
+Board (firmware)  ──BLE GATT notifications──►  PHEW (browser)
+                                                  │
+                            frequency, real, imag, phase, magnitude
+                            arrive point-by-point; Rct/Rs arrive last
+                                                  │
+                                                  ▼
+                                          IndexedDB (browser)
+                                          grouped by Pacific day
+                                                  │
+                                        ┌─────────┴─────────┐
+                                        ▼                   ▼
+                                   Chart.js plots     Export JSON file
+```
+
+All data is stored **locally in your browser** (IndexedDB). Nothing is sent to any server. Clearing browser data removes saved sweeps — use **Export JSON** to keep a backup.
+
+#### Default sweep parameters (match firmware)
+
+The form pre-fills values that match the firmware's `MEASURE:SAMPLE` defaults:
+
+| Parameter | Default value | Notes |
+|-----------|---------------|-------|
+| Rct estimate | 127,000 Ω | Seed for Levenberg-Marquardt fit |
+| Rs estimate | 150 Ω | Seed for LMA fit |
+| Start frequency | 200,000 Hz | High end of sweep |
+| End frequency | 1 Hz | Low end of sweep |
+| Points / decade | 5 | 27 total points for full span |
+| Rcal | 10,000 Ω | Must match on-board calibration resistor |
+| Amplitude | 200 mV | AC excitation (set in firmware, not in web form) |
+
+You can override any field before clicking **Run sweep**. Leave a field blank to use the firmware's built-in default.
+
+#### How to access the PHEW web app (step by step)
 
 1. **Why not double-click `index.html`?**
-   [Web Bluetooth](https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API) is restricted: browsers expect a **secure context** (**`https://`** or **`http://localhost`**). Opening the file as `file://` usually **will not** allow Bluetooth.
+   [Web Bluetooth](https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API) requires a **secure context** — the browser must see **`https://`** or **`http://localhost`**. Opening the file directly as `file://` blocks Bluetooth access.
 
-2. **Serve the folder on localhost** (pick one):
+2. **Start a local web server.** Open a terminal in the repo root and run:
 
    ```bash
    cd web/helpstat-app
    python -m http.server 8080
    ```
 
-   Then open **Chrome or Edge**: [http://localhost:8080](http://localhost:8080)
+   > **Windows (PowerShell):** Use the same command — Python's built-in server works on all platforms. If `python` is not recognized, try `python3` or install Python from [python.org](https://python.org).
 
-3. Turn on the potentiostat board, ensure firmware is running with BLE (the repo enables `BLE_setup()` in `setup()`). Use the page's **Connect** / scan flow; grant Bluetooth permission when prompted.
+3. **Open the app in Chrome or Edge** — go to: [http://localhost:8080](http://localhost:8080)
 
-4. **iPhone Safari** does not support Web Bluetooth for this use case; use the **native iOS app** below.
+   You should see the **PHEW** header with Live / History / About tabs.
+
+4. **Power on the board** (USB-C or battery). The firmware starts BLE advertising automatically (`BLE_setup()` runs in `setup()`).
+
+5. **Connect:**
+   - Click the **Connect** button on the Live tab.
+   - A browser Bluetooth permission dialog appears — select **`HELPStat`** from the device list and click **Pair**.
+   - The status line updates to "Connected: HELPStat".
+
+6. **Run a sweep:**
+   - (Optional) Expand **Sweep parameters** and adjust values, or leave defaults.
+   - Click **Run sweep**. The status shows "Sweep running…".
+   - Wait for the sweep to complete (~30 s for 10 Hz floor, ~108 s for 1 Hz floor at 5 pts/decade).
+   - When done, the app auto-saves the sweep and switches to the **History** tab showing Nyquist and Bode plots.
+
+7. **Review and export:**
+   - Use the **Day** and **Sweep** dropdowns to browse past measurements.
+   - Click **Export JSON** to download the day's data as a `phew_YYYY-MM-DD.json` file.
+   - Use the **Import** button to load JSON exported from another machine or session.
+
+8. **When finished,** press Ctrl+C in the terminal to stop the local server.
+
+#### Supported browsers and platforms
+
+| Platform | Browser | BLE support |
+|----------|---------|-------------|
+| **Windows** | Chrome, Edge | Full (recommended) |
+| **macOS** | Chrome, Edge | Full |
+| **Linux** | Chrome | Full (may need `chrome://flags/#enable-web-bluetooth`) |
+| **Android** | Chrome | Full |
+| **iPhone / iPad** | Safari, Chrome | **No** — Apple does not expose Web Bluetooth. Use the native iOS app below, or use the History tab to import JSON from another device. |
+
+#### PWA / home screen install
+
+PHEW includes a `manifest.webmanifest` so browsers offer **"Add to Home Screen"** / **"Install App"**. This creates a standalone shortcut that opens full-screen. Offline use is limited to viewing previously saved data; BLE requires a network context.
 
 ### iOS app (`ios/HELPStatCompanion/`)
 
