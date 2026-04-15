@@ -124,6 +124,7 @@ All serial traffic is **115200 baud**, commands end with a **newline** (`\n` or 
 | `SET:<14 params>` | Set parameters without measuring |
 | `WEARABLE:ON` / `OFF` | Enable/disable automatic timed sweeps |
 | `INTERVAL:N` | Auto-sweep interval in seconds (min 10, default 300) |
+| `STOP` | Abort a running sweep immediately (also works mid-sweep) |
 | `RCAL:ohms` | Set RCAL value and save to NVS (e.g. `RCAL:10000`) |
 | `RCAL:SHOW` | Print stored and runtime RCAL values |
 | `DISPLAYRANGE:min,max,val[,title]` | Update SPI display (Akshay PCB only) |
@@ -266,6 +267,18 @@ These values are from a bench test with a nominal 10 kOhm resistor (actual ~327 
 
 If **`startFreq` equals `endFreq`**, the sweep math yields **zero points** and the measurement hangs. For an effectively single frequency, use a **tiny span**, e.g. `200000` → `199000` with `numPoints=1`.
 
+### Stopping a sweep mid-flight
+
+You can abort a running sweep at any time. The firmware checks for abort requests between each frequency point.
+
+| Method | How | Where |
+|--------|-----|-------|
+| **PHEW web app** | Click the red **Stop** button (replaces "Run sweep" during a sweep) | `web/helpstat-app/` |
+| **Serial** | Send `STOP` (case-insensitive) over the serial connection | Any serial terminal, pyserial script |
+| **BLE programmatic** | Write byte `2` to the `start` characteristic | Any BLE client using the GATT UUIDs |
+
+On abort the firmware shuts down the AFE cleanly, prints any partial CSV data collected so far, and skips the Rct/Rs curve fit and BLE data transmission (partial data would produce unreliable fits). The board is immediately ready for the next command.
+
 ### Long sweeps + USB
 
 On some PCs the ESP32-S3 **USB Serial/JTAG** link can **glitch or disconnect** during long runs. The firmware still **writes results to the SD card** when a card is present — check `/eis/` on the card if the serial stream stops early.
@@ -367,6 +380,7 @@ On boot, the firmware runs a diagnostic sequence: **3 backlight blinks** (GPIO 1
 - **Gain hysteresis**: 10% frequency margin on RTIA switching reduces oscillation at band boundaries.
 - **Averaging**: Configurable per-point averaging (`_numAverages`, default 1; increase for noisy electrochemical loads).
 - **Speed-optimized defaults**: Settling delay (2 AC periods), 50 ms gain-switch delays, 5 pts/decade — full 1 Hz–200 kHz sweep in ~108 s.
+- **Sweep abort**: `STOP` serial command or BLE `start=2` write aborts a running sweep between frequency points. AFE shuts down cleanly; partial data is printed.
 - **SPI DFT polling**: On PCBs without AFE→MCU interrupt (Akshay), DFTRDY is polled over SPI.
 - **RCAL in NVS**: `RCAL:` stores calibration value in flash (survives reboot).
 - **Wearable auto-sweep**: Timer-based sweeps for field use (`WEARABLE:ON`, `INTERVAL:N`).
@@ -472,7 +486,8 @@ You can override any field before clicking **Run sweep**. Leave a field blank to
 
 6. **Run a sweep:**
    - (Optional) Expand **Sweep parameters** and adjust values, or leave defaults.
-   - Click **Run sweep**. The status shows "Sweep running…".
+   - Click **Run sweep**. A progress bar appears showing point count, current frequency, and elapsed time.
+   - To cancel mid-sweep, click the red **Stop** button (replaces "Run sweep" while running). The firmware aborts cleanly and partial data is discarded.
    - Wait for the sweep to complete (~30 s for 10 Hz floor, ~108 s for 1 Hz floor at 5 pts/decade).
    - When done, the app auto-saves the sweep and switches to the **History** tab showing Nyquist and Bode plots.
 
