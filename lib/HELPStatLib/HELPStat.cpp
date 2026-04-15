@@ -3130,6 +3130,39 @@ void HELPStat::BLE_settings() {
   }while((!start_value || old_start_value == start_value) && buttonStatus); // Maybe remove the old_start_value stuff? (&& digitalRead(BUTTON))
 }
 
+void HELPStat::readBLEParameters() {
+  if(pCharacteristicRct->getValue().length() > 0)
+    _rct_estimate = String(pCharacteristicRct->getValue().c_str()).toFloat();
+  if(pCharacteristicRs->getValue().length() > 0)
+    _rs_estimate  = String(pCharacteristicRs->getValue().c_str()).toFloat();
+  if(pCharacteristicNumCycles->getValue().length() > 0)
+    _numCycles = String(pCharacteristicNumCycles->getValue().c_str()).toFloat();
+  if(pCharacteristicNumPoints->getValue().length() > 0)
+    _numPoints = String(pCharacteristicNumPoints->getValue().c_str()).toFloat();
+  if(pCharacteristicStartFreq->getValue().length() > 0)
+    _startFreq = String(pCharacteristicStartFreq->getValue().c_str()).toFloat();
+  if(pCharacteristicEndFreq->getValue().length() > 0)
+    _endFreq   = String(pCharacteristicEndFreq->getValue().c_str()).toFloat();
+  if(pCharacteristicRcalVal->getValue().length() > 0)
+    _rcalVal   = String(pCharacteristicRcalVal->getValue().c_str()).toFloat();
+  if(pCharacteristicBiasVolt->getValue().length() > 0)
+    _biasVolt   = String(pCharacteristicBiasVolt->getValue().c_str()).toFloat();
+  if(pCharacteristicZeroVolt->getValue().length() > 0)
+    _zeroVolt   = String(pCharacteristicZeroVolt->getValue().c_str()).toFloat();
+  if(pCharacteristicDelaySecs->getValue().length() > 0)
+    _delaySecs   = String(pCharacteristicDelaySecs->getValue().c_str()).toFloat();
+  if(pCharacteristicExtGain->getValue().length() > 0)
+    _extGain   = String(pCharacteristicExtGain->getValue().c_str()).toFloat();
+  if(pCharacteristicDacGain->getValue().length() > 0)
+    _dacGain   = String(pCharacteristicDacGain->getValue().c_str()).toFloat();
+  _folderName = String((pCharacteristicFolderName->getValue()).c_str());
+  _fileName = String((pCharacteristicFileName->getValue()).c_str());
+
+  Serial.println("[BLE] Parameters read from BLE characteristics:");
+  Serial.printf("  startFreq=%.0f endFreq=%.0f pts/dec=%.0f rcal=%.0f\n", _startFreq, _endFreq, _numPoints, _rcalVal);
+  Serial.printf("  rct_est=%.0f rs_est=%.0f bias=%.2f zero=%.2f\n", _rct_estimate, _rs_estimate, _biasVolt, _zeroVolt);
+}
+
 /*
   This function sends the calculated Rct and Rs values to an external BLE client. The notify
   flags for these characteristics are also set to inform the client that data has been updated.

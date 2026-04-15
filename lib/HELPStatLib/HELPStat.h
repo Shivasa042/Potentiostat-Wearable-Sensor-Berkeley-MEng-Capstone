@@ -269,7 +269,10 @@ class HELPStat {
             StartCharCallbacks(HELPStat* p) : _parent(p) {}
             void onWrite(BLECharacteristic* pChar) {
                 uint8_t val = *(pChar->getData());
-                if (val == 2) {
+                if (val == 1) {
+                    Serial.println("[BLE] Sweep trigger received (start=1).");
+                    _parent->_bleSweepRequested = true;
+                } else if (val == 2) {
                     Serial.println("SWEEP ABORTED by BLE stop command.");
                     _parent->requestAbort();
                 }
@@ -361,6 +364,7 @@ class HELPStat {
         float _minExpectedImpedance = 1.0;       // Minimum expected impedance in Ohms
         int _numAverages = 1;                    // Averages per frequency point (validated samples only)
         volatile bool _abortSweep = false;       // Set true to abort sweep early (BLE or serial STOP)
+        volatile bool _bleSweepRequested = false; // Set true by BLE start=1 write callback
         bool _enableNotchFilter = false;         // 50/60 Hz rejection filter
         bool _notchIs50Hz = false;               // True for 50Hz, false for 60Hz
         
@@ -420,7 +424,24 @@ class HELPStat {
         void runSweep(void);
         void runSweep(uint32_t numCycles, uint32_t delaySecs); // sweep works now and cycles correctly
         void requestAbort()  { _abortSweep = true; }
-        bool wasAborted()    { return _abortSweep; } 
+        bool wasAborted()    { return _abortSweep; }
+        bool checkBLESweepRequest() {
+            if (_bleSweepRequested) { _bleSweepRequested = false; return true; }
+            return false;
+        }
+        void readBLEParameters();
+        float getStartFreq()   { return _startFreq; }
+        float getEndFreq()     { return _endFreq; }
+        float getNumPoints()   { return _numPoints; }
+        float getRcalVal()     { return _rcalVal; }
+        float getBiasVolt()    { return _biasVolt; }
+        float getZeroVolt()    { return _zeroVolt; }
+        float getExtGain()     { return _extGain; }
+        float getDacGain()     { return _dacGain; }
+        float getRctEstimate() { return _rct_estimate; }
+        float getRsEstimate()  { return _rs_estimate; }
+        uint32_t getNumCycles(){ return _numCycles; }
+        uint32_t getDelaySecs(){ return _delaySecs; } 
         void resetSweep(SoftSweepCfg_Type *pSweepCfg, float *pNextFreq); // works
         
         void settlingDelay(float freq);

@@ -602,6 +602,18 @@ void loop() {
     }
   }
 
+  // BLE trigger: web app wrote start=1 to the start characteristic
+  if (demo.checkBLESweepRequest() && !measurementRequested) {
+    Serial.println("[BLE] Sweep triggered via web app.");
+    demo.readBLEParameters();
+    demo.setParameters(
+      MODE_EIS, demo.getStartFreq(), demo.getEndFreq(), demo.getNumPoints(),
+      demo.getBiasVolt(), demo.getZeroVolt(), demo.getRcalVal(),
+      demo.getExtGain(), demo.getDacGain(), demo.getRctEstimate(), demo.getRsEstimate(),
+      demo.getNumCycles(), demo.getDelaySecs(), 200.0);
+    measurementRequested = true;
+  }
+
   // Auto-trigger: on first boot or when the interval has elapsed
   if (wearableMode && !measurementRequested) {
     unsigned long now = millis();
