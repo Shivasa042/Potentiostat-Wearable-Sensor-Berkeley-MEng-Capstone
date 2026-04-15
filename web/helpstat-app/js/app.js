@@ -277,16 +277,16 @@ function readSweepOptionsFromForm() {
   return {
     rctEst: n("in-rct") ?? "127000",
     rsEst: n("in-rs") ?? "150",
-    startFreq: n("in-f0"),
-    endFreq: n("in-f1"),
-    numPoints: n("in-ppd"),
-    numCycles: n("in-cycles"),
-    rcalVal: n("in-rcal"),
-    biasVolt: n("in-bias"),
-    zeroVolt: n("in-zero"),
-    delaySecs: n("in-delay"),
-    extGain: n("in-extg"),
-    dacGain: n("in-dacg"),
+    startFreq: n("in-f0") ?? "200000",
+    endFreq: n("in-f1") ?? "1",
+    numPoints: n("in-ppd") ?? "5",
+    numCycles: n("in-cycles") ?? "0",
+    rcalVal: n("in-rcal") ?? "10000",
+    biasVolt: n("in-bias") ?? "0",
+    zeroVolt: n("in-zero") ?? "0",
+    delaySecs: n("in-delay") ?? "0",
+    extGain: n("in-extg") ?? "1",
+    dacGain: n("in-dacg") ?? "1",
   };
 }
 
