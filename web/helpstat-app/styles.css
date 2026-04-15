@@ -265,6 +265,40 @@ select {
   font-weight: 600;
 }
 
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 1rem;
+}
+
+.stat-block h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stat-list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.65rem;
+  font-size: 0.9rem;
+}
+
+.stat-list dt {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.stat-list dd {
+  margin: 0;
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+  text-align: right;
+}
+
 .charts {
   margin-top: 0.5rem;
 }

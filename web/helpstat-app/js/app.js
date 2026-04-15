@@ -255,6 +255,58 @@ async function onDayChange() {
   onSweepChange();
 }
 
+function fmtZ(v) {
+  if (v == null || !isFinite(v)) return "—";
+  if (Math.abs(v) >= 1e6) return `${(v / 1e6).toFixed(2)} MΩ`;
+  if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(2)} kΩ`;
+  return `${v.toFixed(2)} Ω`;
+}
+
+function fmtDeg(v) {
+  if (v == null || !isFinite(v)) return "—";
+  return `${v.toFixed(2)}°`;
+}
+
+function populateStats(s) {
+  const statsEl = $("sweep-stats");
+  if (!s?.points?.length) { statsEl.hidden = true; return; }
+  statsEl.hidden = false;
+
+  const pts = s.points;
+  const mags = pts.map((p) => p.mag).filter(isFinite);
+  const phases = pts.map((p) => p.ph).filter(isFinite);
+  const freqs = pts.map((p) => p.f).filter(isFinite);
+
+  const rct = parseFloat(s.rct);
+  const rs = parseFloat(s.rs);
+
+  $("stat-rct").textContent = isFinite(rct) ? fmtZ(rct) : "—";
+  $("stat-rs").textContent = isFinite(rs) ? fmtZ(rs) : "—";
+  $("stat-rtotal").textContent = isFinite(rct) && isFinite(rs) ? fmtZ(rct + rs) : "—";
+
+  if (mags.length) {
+    const magMin = Math.min(...mags);
+    const magMax = Math.max(...mags);
+    const magMean = mags.reduce((a, b) => a + b, 0) / mags.length;
+    $("stat-mag-min").textContent = fmtZ(magMin);
+    $("stat-mag-max").textContent = fmtZ(magMax);
+    $("stat-mag-mean").textContent = fmtZ(magMean);
+    $("stat-mag-range").textContent = fmtZ(magMax - magMin);
+  }
+
+  if (phases.length) {
+    $("stat-ph-min").textContent = fmtDeg(Math.min(...phases));
+    $("stat-ph-max").textContent = fmtDeg(Math.max(...phases));
+  }
+
+  if (freqs.length) {
+    const sorted = [...freqs].sort((a, b) => a - b);
+    $("stat-freq-lo").textContent = formatFreq(sorted[0]);
+    $("stat-freq-hi").textContent = formatFreq(sorted[sorted.length - 1]);
+    $("stat-npts").textContent = String(pts.length);
+  }
+}
+
 function onSweepChange() {
   const day = $("sel-day").value;
   const idx = parseInt($("sel-sweep").value, 10);
@@ -263,6 +315,7 @@ function onSweepChange() {
     const s = rec.sweeps?.[idx];
     if (s) {
       $("hist-summary").textContent = `Rct: ${s.rct || "—"} Ω   Rs: ${s.rs || "—"} Ω`;
+      populateStats(s);
       renderSweep(chartRoot, s);
     }
   });

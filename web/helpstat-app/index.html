@@ -83,6 +83,44 @@
           <p id="hist-summary" class="summary"></p>
         </div>
 
+        <div id="sweep-stats" class="card" hidden>
+          <h2>Sweep statistics</h2>
+          <div class="stats-grid">
+            <div class="stat-block">
+              <h3>Fitted parameters</h3>
+              <dl class="stat-list">
+                <dt>Rct</dt><dd id="stat-rct">—</dd>
+                <dt>Rs</dt><dd id="stat-rs">—</dd>
+                <dt>Rct + Rs</dt><dd id="stat-rtotal">—</dd>
+              </dl>
+            </div>
+            <div class="stat-block">
+              <h3>Magnitude |Z|</h3>
+              <dl class="stat-list">
+                <dt>Min</dt><dd id="stat-mag-min">—</dd>
+                <dt>Max</dt><dd id="stat-mag-max">—</dd>
+                <dt>Mean</dt><dd id="stat-mag-mean">—</dd>
+                <dt>Range</dt><dd id="stat-mag-range">—</dd>
+              </dl>
+            </div>
+            <div class="stat-block">
+              <h3>Phase</h3>
+              <dl class="stat-list">
+                <dt>Min</dt><dd id="stat-ph-min">—</dd>
+                <dt>Max</dt><dd id="stat-ph-max">—</dd>
+              </dl>
+            </div>
+            <div class="stat-block">
+              <h3>Frequency span</h3>
+              <dl class="stat-list">
+                <dt>Low</dt><dd id="stat-freq-lo">—</dd>
+                <dt>High</dt><dd id="stat-freq-hi">—</dd>
+                <dt>Points</dt><dd id="stat-npts">—</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
         <div id="chart-root" class="charts">
           <div class="chart-card">
             <h3>Nyquist</h3>
