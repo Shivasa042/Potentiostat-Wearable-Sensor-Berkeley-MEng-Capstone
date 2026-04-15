@@ -3169,51 +3169,51 @@ void HELPStat::readBLEParameters() {
 */
 void HELPStat::BLE_transmitResults() {
   static char buffer[10];
-  dtostrf(_calculated_Rct,4,3,buffer);
-  pCharacteristicRct->setValue(buffer);
-  pCharacteristicRct->notify();
 
-  dtostrf(_calculated_Rs,4,3,buffer);
-  pCharacteristicRs->setValue(buffer);
-  pCharacteristicRs->notify();
-
-  // Transmit freq, Zreal, and Zimag for all sampled points
+  // Transmit freq, Zreal, Zimag, phase, magnitude for all sampled points FIRST.
+  // Rct/Rs are sent last because the web app uses the Rs notification as the
+  // "sweep complete" signal to finalize and save the data.
   for(uint32_t i = 0; i < _sweepCfg.SweepPoints; i++) {
     for(uint32_t j = 0; j <= _numCycles; j++) {
       impStruct eis;
       eis = eisArr[i + (j * _sweepCfg.SweepPoints)];
       
-      // Transmit Frequency
       dtostrf(eis.freq,1,2,buffer);
       pCharacteristicCurrentFreq->setValue(buffer);
       pCharacteristicCurrentFreq->notify();
 
-      // Transmit Real Impedence
       dtostrf(eis.real,1,4,buffer);
       pCharacteristicReal->setValue(buffer);
       pCharacteristicReal->notify();
 
-      // Transmit Imaginary Impedence
       dtostrf(eis.imag,1,4,buffer);
       pCharacteristicImag->setValue(buffer);
       pCharacteristicImag->notify();
 
       delay(50);
 
-      // Transmit Phase
       dtostrf(eis.phaseDeg,3,4,buffer);
       pCharacteristicPhase->setValue(buffer);
       pCharacteristicPhase->notify();
 
-      // Transmit Phase
       dtostrf(eis.magnitude,3,4,buffer);
       pCharacteristicMagnitude->setValue(buffer);
       pCharacteristicMagnitude->notify();
 
-      // Necessary delay so all BLE calls finish. Not sure why it works, but it does; DON'T TOUCH!
       delay(50);
     }
   }
+
+  // Send Rct and Rs last — Rs receipt triggers finalizeSweep() in the web app
+  dtostrf(_calculated_Rct,4,3,buffer);
+  pCharacteristicRct->setValue(buffer);
+  pCharacteristicRct->notify();
+
+  delay(50);
+
+  dtostrf(_calculated_Rs,4,3,buffer);
+  pCharacteristicRs->setValue(buffer);
+  pCharacteristicRs->notify();
 }
 
 /*
