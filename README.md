@@ -226,17 +226,30 @@ python testing/scenario1_serial_sample.py COM3 10000
 
 - **Time per point** depends on frequency (settling + DFT). **Low Hz is slow** (several seconds per point is normal).
 
-### Measured sweep timings (New_EIS_PCB_Akshay, 10 kOhm load resistor)
+### Measured sweep timings (10 kOhm load resistor)
 
 | Sweep | Points | Approx. duration | Notes |
 |-------|--------|-------------------|-------|
 | Single-point 200 kHz | 1 | ~2 s | Fastest; use small span trick (see below) |
 | Single-point 200 Hz | 1 | ~3 s | |
 | 200 kHz → 10 Hz, 5 pts/decade | 22 | ~30 s | Good for quick characterization |
-| 200 kHz → 1 Hz, 5 pts/decade | 27 | ~3-5 min | Full wearable range; last decade (10→1 Hz) dominates |
-| 200 kHz → 1 Hz, 10 pts/decade | 54 | ~8-15 min | High-resolution; expect USB timeouts on long runs |
+| 200 kHz → 1 Hz, 5 pts/decade | 27 | **~108 s** | Full wearable range (`MEASURE:SAMPLE` default) |
+| 200 kHz → 1 Hz, 10 pts/decade | 54 | ~4-6 min | High-resolution; pass `numPoints=10` in custom `MEASURE:` |
 
-Low-frequency points (< 10 Hz) require many DFT cycles and take several seconds each. The 1 Hz point alone can take 15-30 seconds.
+Low-frequency points (< 10 Hz) are dominated by DFT collection time inside the AD5940 — this is a hardware constraint. The 1 Hz point alone takes several seconds.
+
+### Sweep speed tuning (firmware defaults)
+
+The firmware balances speed and accuracy through these parameters:
+
+| Parameter | Value | Location | Effect |
+|-----------|-------|----------|--------|
+| Settling periods | 2 cycles | `HELPStat.cpp settlingDelay()` | Fewer AC cycles before DFT capture |
+| Averages per point | 1 | `HELPStat.h _numAverages` | Single validated measurement per frequency |
+| Gain-switch delay | 50 ms | `HELPStat.cpp` / `runSweep()` | Reduced from 200 ms; stable with resistive loads |
+| Default pts/decade | 5 | `main.cpp MEASURE:SAMPLE` | 27 points for full 1 Hz–200 kHz span |
+
+These can be increased for noisier electrochemical loads (e.g., set `_numAverages = 3` for sweat sensors). The custom `MEASURE:` command accepts any `numPoints` value.
 
 ### Sample measurement results (10 kOhm load resistor across CE0-SE0)
 
@@ -245,7 +258,7 @@ Low-frequency points (< 10 Hz) require many DFT cycles and take several seconds 
 | 200 kHz single | ~335 Ohm | ~2.6 deg | — | — |
 | 200 Hz single | ~332 Ohm | ~0.05 deg | — | — |
 | 200 kHz → 10 Hz (22 pts) | 311-357 Ohm | -4 to +4 deg | 32.3 Ohm | 323.4 Ohm |
-| 200 kHz → 1 Hz (27 pts) | 312-350 Ohm | -3.6 to +3.5 deg | 25.9 Ohm | 322.1 Ohm |
+| 200 kHz → 1 Hz (27 pts) | 303-365 Ohm | -3.4 to +4.5 deg | -29.5 Ohm | 325.5 Ohm |
 
 These values are from a bench test with a nominal 10 kOhm resistor (actual ~327 Ohm measured — the parallel combination of the 10 kOhm load with the AFE's internal RTIA/feedback path produces the observed lower magnitude).
 
@@ -352,7 +365,8 @@ On boot, the firmware runs a diagnostic sequence: **3 backlight blinks** (GPIO 1
 - **Data validation**: Bad DFT measurements (NaN, inf, out-of-range) are detected and retried (up to 4x) or recorded as NaN.
 - **DFT poll timeout**: ~30 s timeout prevents infinite hangs on open circuit or stuck interrupt path.
 - **Gain hysteresis**: 10% frequency margin on RTIA switching reduces oscillation at band boundaries.
-- **Averaging**: Each frequency point is measured multiple times with validated samples averaged.
+- **Averaging**: Configurable per-point averaging (`_numAverages`, default 1; increase for noisy electrochemical loads).
+- **Speed-optimized defaults**: Settling delay (2 AC periods), 50 ms gain-switch delays, 5 pts/decade — full 1 Hz–200 kHz sweep in ~108 s.
 - **SPI DFT polling**: On PCBs without AFE→MCU interrupt (Akshay), DFTRDY is polled over SPI.
 - **RCAL in NVS**: `RCAL:` stores calibration value in flash (survives reboot).
 - **Wearable auto-sweep**: Timer-based sweeps for field use (`WEARABLE:ON`, `INTERVAL:N`).

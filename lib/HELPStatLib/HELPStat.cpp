@@ -984,7 +984,7 @@ void HELPStat::AD5940_DFTMeasure(void) {
   logSweep(&_sweepCfg, &_currentFreq);
   if(_sweepCfg.SweepEn == bTRUE) {
     configureFrequency(_currentFreq);
-    delay(200);
+    delay(50);
   }
 }
 
@@ -1111,20 +1111,18 @@ void HELPStat::runSweep(void) {
     // Should calibrate when AFE is active
     // checkFreq(_currentFreq);
     configureFrequency(_currentFreq);
-    delay(200); // switching delay - increased for gain stability
+    delay(50);
 
     printf("Cycle %d\n", i);
     printf("Index, Frequency (Hz), DFT Cal, DFT Mag, Rz (Ohms), Rreal, Rimag, Rphase (rads)\n");
     
     while(_sweepCfg.SweepEn == bTRUE)
     {
-      // Gain is already configured for current frequency (configured at end of previous measurement or at start)
       AD5940_DFTMeasureWithAveraging(_numAverages);
-      // AD5940_DFTMeasureEIS();
       AD5940_AFECtrlS(AFECTRL_HSTIAPWR|AFECTRL_INAMPPWR|AFECTRL_EXTBUFPWR|\
               AFECTRL_WG|AFECTRL_DACREFPWR|AFECTRL_HSDACPWR|\
               AFECTRL_SINC2NOTCH, bTRUE);
-      delay(200);
+      delay(50);
     }
 
     unsigned long timeEnd = millis(); 
@@ -1185,20 +1183,18 @@ void HELPStat::runSweep(uint32_t numCycles, uint32_t delaySecs) {
     // Should calibrate when AFE is active
     // checkFreq(_currentFreq);
     configureFrequency(_currentFreq);
-    delay(200); // switching delay - increased for gain stability
+    delay(50);
 
     printf("Cycle %d\n", i);
     printf("Index, Frequency (Hz), DFT Cal, DFT Mag, Rz (Ohms), Rreal, Rimag, Rphase (rads)\n");
     
     while(_sweepCfg.SweepEn == bTRUE)
     {
-      // Gain is already configured for current frequency (configured at end of previous measurement or at start)
       AD5940_DFTMeasureWithAveraging(_numAverages);
-      // AD5940_DFTMeasureEIS();
       AD5940_AFECtrlS(AFECTRL_HSTIAPWR|AFECTRL_INAMPPWR|AFECTRL_EXTBUFPWR|\
               AFECTRL_WG|AFECTRL_DACREFPWR|AFECTRL_HSDACPWR|\
               AFECTRL_SINC2NOTCH, bTRUE);
-      delay(200);
+      delay(50);
     }
 
     unsigned long timeEnd = millis(); 
@@ -1234,9 +1230,9 @@ void HELPStat::settlingDelay(float freq) {
    * At very low frequencies, cap the delay to avoid excessively long waits.
    * At high frequencies, enforce a minimum for analog switch/amplifier transients.
    */
-  const float SETTLE_PERIODS = 4.0f;
-  const unsigned long MIN_DELAY_MS = 5;
-  const unsigned long MAX_DELAY_MS = 10000;
+  const float SETTLE_PERIODS = 2.0f;
+  const unsigned long MIN_DELAY_MS = 2;
+  const unsigned long MAX_DELAY_MS = 3000;
 
   unsigned long periodDelay = (unsigned long)(SETTLE_PERIODS * 1000.0f / freq);
 
@@ -3552,8 +3548,7 @@ void HELPStat::AD5940_DFTMeasureWithAveraging(int numAverages) {
       lastMagRz = magRz;
     }
     
-    // Small delay between averages
-    if(i < numAverages - 1) delay(50);
+    if(i < numAverages - 1) delay(20);
   }
   
   // Average the results
@@ -3596,7 +3591,7 @@ void HELPStat::AD5940_DFTMeasureWithAveraging(int numAverages) {
   logSweep(&_sweepCfg, &_currentFreq);
   if(_sweepCfg.SweepEn == bTRUE) {
     configureFrequency(_currentFreq);
-    delay(200);
+    delay(50);
   }
 }
 

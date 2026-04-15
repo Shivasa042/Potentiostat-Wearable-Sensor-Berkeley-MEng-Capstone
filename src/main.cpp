@@ -335,7 +335,7 @@ void parseSerialCommand() {
         MODE_EIS,          // EIS mode
         200000.0,          // start frequency 200 kHz
         1.0,               // end frequency 1 Hz
-        10,                // points per decade
+        5,                 // points per decade
         0.0,               // bias
         0.0,               // zero volt
         rcalVal,           // rcal (DMM / RCAL: / NVS)
@@ -589,7 +589,7 @@ void loop() {
     if (digitalRead(BUTTON) == LOW) {
       Serial.println("Button pressed; starting default sample EIS");
       demo.setParameters(
-        MODE_EIS, 200000.0, 1.0, 10, 0.0, 0.0, rcalVal, 1, 1, rct_estimate, rs_estimate, 0, 0, 200.0);
+        MODE_EIS, 200000.0, 1.0, 5, 0.0, 0.0, rcalVal, 1, 1, rct_estimate, rs_estimate, 0, 0, 200.0);
       measurementRequested = true;
     }
   }
@@ -601,7 +601,7 @@ void loop() {
       firstBoot = false;
       Serial.println("[WEARABLE] Auto-triggering EIS sweep...");
       demo.setParameters(
-        MODE_EIS, 200000.0, 1.0, 10, 0.0, 0.0, rcalVal, 1, 1, rct_estimate, rs_estimate, 0, 0, 200.0);
+        MODE_EIS, 200000.0, 1.0, 5, 0.0, 0.0, rcalVal, 1, 1, rct_estimate, rs_estimate, 0, 0, 200.0);
       measurementRequested = true;
     }
   }

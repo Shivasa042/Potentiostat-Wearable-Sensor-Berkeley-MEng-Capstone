@@ -346,7 +346,7 @@ class HELPStat {
         // Measurement validation parameters
         float _maxExpectedImpedance = 100000.0;  // Maximum expected impedance in Ohms
         float _minExpectedImpedance = 1.0;       // Minimum expected impedance in Ohms
-        int _numAverages = 3;                    // Averages per frequency point (validated samples only)
+        int _numAverages = 1;                    // Averages per frequency point (validated samples only)
         bool _enableNotchFilter = false;         // 50/60 Hz rejection filter
         bool _notchIs50Hz = false;               // True for 50Hz, false for 60Hz
         
