@@ -1068,7 +1068,8 @@ void HELPStat::logSweep(SoftSweepCfg_Type *pSweepCfg, float *pNextFreq) {
   _delaySecs. These are updated over BLE (see the BLE_settings() function).
 */
 void HELPStat::runSweep(void) {
-  _currentCycle = 0; 
+  _currentCycle = 0;
+  _abortSweep = false;
   /*
     Need to not run the program if ArraySize < total points 
     TO DO: ADD A CHECK HERE  
@@ -1081,6 +1082,7 @@ void HELPStat::runSweep(void) {
   // digitalWrite(LED1, HIGH); 
 
   for(uint32_t i = 0; i <= _numCycles; i++) {
+    if (_abortSweep) break;
     /* 
       Wakeup AFE by read register, read 10 times at most.
       Do this because AD594x goes to sleep after each cycle. 
@@ -1091,10 +1093,9 @@ void HELPStat::runSweep(void) {
       unsigned long prevTime = millis();
       unsigned long currTime = millis();
       printf("Delaying for %d seconds\n", _delaySecs);
-      while(currTime - prevTime < _delaySecs * 1000)
+      while(currTime - prevTime < _delaySecs * 1000 && !_abortSweep)
       {
         currTime = millis();
-        // printf("Curr delay: %d\n", currTime - prevTime);
       }
     } 
     // Timer for cycle time
@@ -1116,8 +1117,18 @@ void HELPStat::runSweep(void) {
     printf("Cycle %d\n", i);
     printf("Index, Frequency (Hz), DFT Cal, DFT Mag, Rz (Ohms), Rreal, Rimag, Rphase (rads)\n");
     
-    while(_sweepCfg.SweepEn == bTRUE)
+    while(_sweepCfg.SweepEn == bTRUE && !_abortSweep)
     {
+      if (Serial.available()) {
+        String cmd = Serial.readStringUntil('\n');
+        cmd.trim();
+        cmd.toUpperCase();
+        if (cmd == "STOP") {
+          Serial.println("SWEEP ABORTED by serial STOP command.");
+          _abortSweep = true;
+          break;
+        }
+      }
       AD5940_DFTMeasureWithAveraging(_numAverages);
       AD5940_AFECtrlS(AFECTRL_HSTIAPWR|AFECTRL_INAMPPWR|AFECTRL_EXTBUFPWR|\
               AFECTRL_WG|AFECTRL_DACREFPWR|AFECTRL_HSDACPWR|\
@@ -1126,13 +1137,21 @@ void HELPStat::runSweep(void) {
     }
 
     unsigned long timeEnd = millis(); 
-    printf("Time spent running Cycle %d (seconds): %lu\n", i, (timeEnd-timeStart)/1000);
+    if (_abortSweep) {
+      printf("Cycle %d ABORTED after %lu seconds.\n", i, (timeEnd-timeStart)/1000);
+    } else {
+      printf("Time spent running Cycle %d (seconds): %lu\n", i, (timeEnd-timeStart)/1000);
+    }
   }
   
   /* Shutdown to conserve power. This turns off the LP-Loop and resets the AFE. */
   AD5940_ShutDownS();
-  printf("All cycles finished.");
-  printf("AD594x shutting down.");
+  if (_abortSweep) {
+    printf("Sweep aborted. AFE shut down.\n");
+  } else {
+    printf("All cycles finished.");
+    printf("AD594x shutting down.");
+  }
 
   /* LEDs to show end of cycle */
   // digitalWrite(LED1, LOW);
@@ -1140,7 +1159,8 @@ void HELPStat::runSweep(void) {
 }
 void HELPStat::runSweep(uint32_t numCycles, uint32_t delaySecs) {
   _numCycles = numCycles; 
-  _currentCycle = 0; 
+  _currentCycle = 0;
+  _abortSweep = false;
   /*
     Need to not run the program if ArraySize < total points 
     TO DO: ADD A CHECK HERE  
@@ -1153,6 +1173,7 @@ void HELPStat::runSweep(uint32_t numCycles, uint32_t delaySecs) {
   // digitalWrite(LED1, HIGH); 
 
   for(uint32_t i = 0; i <= numCycles; i++) {
+    if (_abortSweep) break;
     /* 
       Wakeup AFE by read register, read 10 times at most.
       Do this because AD594x goes to sleep after each cycle. 
@@ -1163,10 +1184,9 @@ void HELPStat::runSweep(uint32_t numCycles, uint32_t delaySecs) {
       unsigned long prevTime = millis();
       unsigned long currTime = millis();
       printf("Delaying for %d seconds\n", delaySecs);
-      while(currTime - prevTime < delaySecs * 1000)
+      while(currTime - prevTime < delaySecs * 1000 && !_abortSweep)
       {
         currTime = millis();
-        // printf("Curr delay: %d\n", currTime - prevTime);
       }
     } 
     // Timer for cycle time
@@ -1188,8 +1208,18 @@ void HELPStat::runSweep(uint32_t numCycles, uint32_t delaySecs) {
     printf("Cycle %d\n", i);
     printf("Index, Frequency (Hz), DFT Cal, DFT Mag, Rz (Ohms), Rreal, Rimag, Rphase (rads)\n");
     
-    while(_sweepCfg.SweepEn == bTRUE)
+    while(_sweepCfg.SweepEn == bTRUE && !_abortSweep)
     {
+      if (Serial.available()) {
+        String cmd = Serial.readStringUntil('\n');
+        cmd.trim();
+        cmd.toUpperCase();
+        if (cmd == "STOP") {
+          Serial.println("SWEEP ABORTED by serial STOP command.");
+          _abortSweep = true;
+          break;
+        }
+      }
       AD5940_DFTMeasureWithAveraging(_numAverages);
       AD5940_AFECtrlS(AFECTRL_HSTIAPWR|AFECTRL_INAMPPWR|AFECTRL_EXTBUFPWR|\
               AFECTRL_WG|AFECTRL_DACREFPWR|AFECTRL_HSDACPWR|\
@@ -1198,13 +1228,21 @@ void HELPStat::runSweep(uint32_t numCycles, uint32_t delaySecs) {
     }
 
     unsigned long timeEnd = millis(); 
-    printf("Time spent running Cycle %d (seconds): %lu\n", i, (timeEnd-timeStart)/1000);
+    if (_abortSweep) {
+      printf("Cycle %d ABORTED after %lu seconds.\n", i, (timeEnd-timeStart)/1000);
+    } else {
+      printf("Time spent running Cycle %d (seconds): %lu\n", i, (timeEnd-timeStart)/1000);
+    }
   }
   
   /* Shutdown to conserve power. This turns off the LP-Loop and resets the AFE. */
   AD5940_ShutDownS();
-  Serial.println("All cycles finished.");
-  Serial.println("AD594x shutting down.");
+  if (_abortSweep) {
+    printf("Sweep aborted. AFE shut down.\n");
+  } else {
+    Serial.println("All cycles finished.");
+    Serial.println("AD594x shutting down.");
+  }
 
   /* LEDs to show end of cycle */
   // digitalWrite(LED1, LOW);
@@ -2911,7 +2949,8 @@ void HELPStat::BLE_setup() {
                       CHARACTERISTIC_UUID_START,
                       BLECharacteristic::PROPERTY_WRITE
                     );
-  
+  pCharacteristicStart->setCallbacks(new StartCharCallbacks(this));
+
   pCharacteristicRct = pService->createCharacteristic(
                       CHARACTERISTIC_UUID_RCT,
                       BLECharacteristic::PROPERTY_READ   |

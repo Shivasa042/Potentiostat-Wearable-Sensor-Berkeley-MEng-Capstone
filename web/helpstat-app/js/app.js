@@ -148,6 +148,8 @@ async function finalizeSweep() {
   };
   await appendSweep(sweep);
   stopProgress(true);
+  $("btn-sweep").hidden = false;
+  $("btn-stop").hidden = true;
   $("live-status").textContent = `Saved sweep (${sweep.pstTimeLabel})`;
   await refreshHistorySelectors();
   $("sel-day").value = sweep.pstDateKey;
@@ -315,6 +317,8 @@ async function main() {
   $("btn-sweep").addEventListener("click", async () => {
     resetLive();
     $("live-status").textContent = "Sweep running\u2026";
+    $("btn-sweep").hidden = true;
+    $("btn-stop").hidden = false;
     startProgress();
     try {
       await ble.runSweep(readSweepOptionsFromForm());
@@ -323,7 +327,26 @@ async function main() {
       stopProgress(false);
       $("sweep-progress").hidden = true;
       $("live-status").textContent = String(e.message || e);
+      $("btn-sweep").hidden = false;
+      $("btn-stop").hidden = true;
     }
+  });
+
+  $("btn-stop").addEventListener("click", async () => {
+    try {
+      await ble.stopSweep();
+      stopProgress(false);
+      const n = live.listFreq.length;
+      $("progress-fill").style.width = "100%";
+      $("progress-fill").style.background = "#ef4444";
+      $("progress-text").textContent = `Aborted \u2014 ${n} point${n !== 1 ? "s" : ""} collected`;
+      $("live-status").textContent = "Sweep stopped by user.";
+    } catch (e) {
+      console.error(e);
+      $("live-status").textContent = "Stop failed: " + String(e.message || e);
+    }
+    $("btn-sweep").hidden = false;
+    $("btn-stop").hidden = true;
   });
 
   $("btn-refresh-days").addEventListener("click", async () => {

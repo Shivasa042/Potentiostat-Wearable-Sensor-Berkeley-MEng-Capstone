@@ -198,6 +198,12 @@ select {
   color: #0f172a;
 }
 
+.btn.danger {
+  background: #ef4444;
+  border-color: #dc2626;
+  color: #fff;
+}
+
 .row {
   display: flex;
   align-items: flex-end;

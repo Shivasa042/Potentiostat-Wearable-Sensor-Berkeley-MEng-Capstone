@@ -110,4 +110,8 @@ export class HelpStatBle {
     await this.writeByte("start", 1);
     await this.writeByte("start", 0);
   }
+
+  async stopSweep() {
+    await this.writeByte("start", 2);
+  }
 }

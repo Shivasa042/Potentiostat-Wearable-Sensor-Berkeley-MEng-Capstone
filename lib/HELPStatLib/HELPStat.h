@@ -250,7 +250,7 @@ typedef struct _adcStruct {
 
 class HELPStat {
     private:
-        class MyServerCallbacks: public BLEServerCallbacks { // BLE Callback (just says "Device Connected" or "Device Disconnected")
+        class MyServerCallbacks: public BLEServerCallbacks {
             void onConnect(BLEServer* pServer) {
                 bool deviceConnected = true;
                 Serial.println("Device Connected");
@@ -261,6 +261,19 @@ class HELPStat {
                 pServer->startAdvertising();
                 Serial.println("Device Disconnected");
             };
+        };
+
+        class StartCharCallbacks: public BLECharacteristicCallbacks {
+            HELPStat* _parent;
+        public:
+            StartCharCallbacks(HELPStat* p) : _parent(p) {}
+            void onWrite(BLECharacteristic* pChar) {
+                uint8_t val = *(pChar->getData());
+                if (val == 2) {
+                    Serial.println("SWEEP ABORTED by BLE stop command.");
+                    _parent->requestAbort();
+                }
+            }
         };
 
         uint32_t _waitClcks; // clock cycles to wait for
@@ -347,6 +360,7 @@ class HELPStat {
         float _maxExpectedImpedance = 100000.0;  // Maximum expected impedance in Ohms
         float _minExpectedImpedance = 1.0;       // Minimum expected impedance in Ohms
         int _numAverages = 1;                    // Averages per frequency point (validated samples only)
+        volatile bool _abortSweep = false;       // Set true to abort sweep early (BLE or serial STOP)
         bool _enableNotchFilter = false;         // 50/60 Hz rejection filter
         bool _notchIs50Hz = false;               // True for 50Hz, false for 60Hz
         
@@ -404,7 +418,9 @@ class HELPStat {
         void getMagPhase(int32_t real, int32_t image, float* pMag, float* pPhase); // works 
         void logSweep(SoftSweepCfg_Type *pSweepCfg, float *pNextFreq); // works
         void runSweep(void);
-        void runSweep(uint32_t numCycles, uint32_t delaySecs); // sweep works now and cycles correctly 
+        void runSweep(uint32_t numCycles, uint32_t delaySecs); // sweep works now and cycles correctly
+        void requestAbort()  { _abortSweep = true; }
+        bool wasAborted()    { return _abortSweep; } 
         void resetSweep(SoftSweepCfg_Type *pSweepCfg, float *pNextFreq); // works
         
         void settlingDelay(float freq);

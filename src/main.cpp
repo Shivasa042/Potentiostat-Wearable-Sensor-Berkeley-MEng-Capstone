@@ -152,6 +152,7 @@ void parseSerialCommand() {
       Serial.println("MEASURE:mode,startFreq,endFreq,numPoints,biasVolt,zeroVolt,rcalVal,extGain,dacGain,rct_est,rs_est,numCycles,delaySecs,amplitude");
       Serial.println("SET:mode,startFreq,endFreq,numPoints,biasVolt,zeroVolt,rcalVal,extGain,dacGain,rct_est,rs_est,numCycles,delaySecs,amplitude");
       Serial.println("MEASURE:SAMPLE or MEASURE:DEFAULT - run built-in 1Hz-200kHz EIS sweep");
+      Serial.println("STOP - abort a running sweep (also works mid-sweep via BLE start=2)");
       Serial.println("\nWearable / Standalone:");
       Serial.println("  WEARABLE:ON  - enable auto-sweep timer (Scenario 3 / field)");
       Serial.println("  WEARABLE:OFF - disable auto-sweep, manual only");
@@ -193,6 +194,13 @@ void parseSerialCommand() {
       return;
     }
     
+    // STOP command — abort a running sweep
+    if (command == "STOP") {
+      demo.requestAbort();
+      Serial.println("STOP received — sweep abort requested.");
+      return;
+    }
+
     // STATUS command
     if (command == "STATUS") {
       Serial.println("\n=== STATUS ===");
@@ -625,14 +633,20 @@ void loop() {
         Serial.println("Running frequency sweep...");
         demo.runSweep();
 
-        Serial.println("\nCalculating Rct and Rs...");
-        demo.calculateResistors();
+        if (demo.wasAborted()) {
+          Serial.println("\n=== Sweep ABORTED — partial data follows ===");
+          demo.printDataCSV();
+          Serial.println("Ready for next measurement.");
+        } else {
+          Serial.println("\nCalculating Rct and Rs...");
+          demo.calculateResistors();
 
-        Serial.println("\n=== Measurement Complete ===");
-        demo.printDataCSV();
+          Serial.println("\n=== Measurement Complete ===");
+          demo.printDataCSV();
 
-        demo.BLE_transmitResults();
-        demo.saveDataEIS();
+          demo.BLE_transmitResults();
+          demo.saveDataEIS();
+        }
         break;
 
       case MODE_CV:  demo.runCV();  break;
