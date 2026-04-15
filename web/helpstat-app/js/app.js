@@ -202,8 +202,8 @@ function readSweepOptionsFromForm() {
     return x === "" ? null : x;
   };
   return {
-    rctEst: n("in-rct") ?? "5000",
-    rsEst: n("in-rs") ?? "100",
+    rctEst: n("in-rct") ?? "127000",
+    rsEst: n("in-rs") ?? "150",
     startFreq: n("in-f0"),
     endFreq: n("in-f1"),
     numPoints: n("in-ppd"),
@@ -229,7 +229,7 @@ async function main() {
       ble.onNotify = onBleNotify;
       ble.onDisconnect = () => setBleUi(false, "Disconnected");
       await ble.connect();
-      setBleUi(true, `Connected: ${ble.device.name || "HELPStat"}`);
+      setBleUi(true, `Connected: ${ble.device.name || "PHEW"}`);
     } catch (e) {
       console.error(e);
       setBleUi(false, String(e.message || e));
@@ -267,7 +267,7 @@ async function main() {
     const blob = new Blob([json], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `helpstat_${day}.json`;
+    a.download = `phew_${day}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
   });

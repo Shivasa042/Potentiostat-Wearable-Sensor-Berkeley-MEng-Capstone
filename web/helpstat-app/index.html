@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#0f172a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="description" content="HELPStat companion — BLE EIS, Pacific-day history, Nyquist & Bode" />
-  <title>HELPStat</title>
+  <meta name="description" content="PHEW — Portable Health &amp; Electrochemical Wearable companion" />
+  <title>PHEW</title>
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%230ea5e9' width='32' height='32' rx='6'/%3E%3Ctext x='16' y='22' text-anchor='middle' fill='white' font-size='16' font-family='system-ui'%3EH%3C/text%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%230ea5e9' width='32' height='32' rx='6'/%3E%3Ctext x='16' y='22' text-anchor='middle' fill='white' font-size='14' font-family='system-ui' font-weight='bold'%3EP%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
 </head>
@@ -19,8 +19,8 @@
       <div class="brand">
         <span class="logo">◇</span>
         <div>
-          <h1>HELPStat</h1>
-          <p class="tag">Potentiostat · EIS · wearable</p>
+          <h1>PHEW</h1>
+          <p class="tag">Portable Health &amp; Electrochemical Wearable</p>
         </div>
       </div>
       <nav class="tabs" aria-label="Sections">
@@ -48,13 +48,13 @@
         <details class="card">
           <summary>Sweep parameters (optional)</summary>
           <div class="grid-form">
-            <label>Rct est (Ω) <input id="in-rct" type="text" value="5000" autocomplete="off" /></label>
-            <label>Rs est (Ω) <input id="in-rs" type="text" value="100" autocomplete="off" /></label>
-            <label>Start freq (Hz) <input id="in-f0" type="text" placeholder="e.g. 100000" autocomplete="off" /></label>
-            <label>End freq (Hz) <input id="in-f1" type="text" placeholder="e.g. 1" autocomplete="off" /></label>
-            <label>Points / decade <input id="in-ppd" type="text" placeholder="e.g. 10" autocomplete="off" /></label>
+            <label>Rct est (Ω) <input id="in-rct" type="text" value="127000" autocomplete="off" /></label>
+            <label>Rs est (Ω) <input id="in-rs" type="text" value="150" autocomplete="off" /></label>
+            <label>Start freq (Hz) <input id="in-f0" type="text" placeholder="200000" autocomplete="off" /></label>
+            <label>End freq (Hz) <input id="in-f1" type="text" placeholder="1" autocomplete="off" /></label>
+            <label>Points / decade <input id="in-ppd" type="text" placeholder="5" autocomplete="off" /></label>
             <label>Num cycles <input id="in-cycles" type="text" placeholder="0" autocomplete="off" /></label>
-            <label>Rcal (Ω) <input id="in-rcal" type="text" placeholder="100" autocomplete="off" /></label>
+            <label>Rcal (Ω) <input id="in-rcal" type="text" placeholder="10000" autocomplete="off" /></label>
             <label>Bias V <input id="in-bias" type="text" placeholder="0" autocomplete="off" /></label>
             <label>Zero V <input id="in-zero" type="text" placeholder="0" autocomplete="off" /></label>
             <label>Delay (s) <input id="in-delay" type="text" placeholder="0" autocomplete="off" /></label>
@@ -105,7 +105,7 @@
             <li><strong>Install on home screen:</strong> use your browser’s “Add to Home Screen” for a full-screen shortcut; offline use is limited to viewing imported data once cached.</li>
           </ul>
           <h2>Repository</h2>
-          <p>Firmware and hardware: see the project README. This folder (<code>web/helpstat-app</code>) is the maintained companion UI.</p>
+          <p>Firmware and hardware: see the project README. This folder (<code>web/helpstat-app</code>) is the PHEW companion UI.</p>
         </div>
       </section>
     </main>

@@ -105,8 +105,8 @@ export class HelpStatBle {
     if (opts.extGain != null) await w("extGain", opts.extGain);
     if (opts.dacGain != null) await w("dacGain", opts.dacGain);
 
-    await this.writeUtf8("rct", String(opts.rctEst ?? "5000"));
-    await this.writeUtf8("rs", String(opts.rsEst ?? "100"));
+    await this.writeUtf8("rct", String(opts.rctEst ?? "127000"));
+    await this.writeUtf8("rs", String(opts.rsEst ?? "150"));
     await this.writeByte("start", 1);
     await this.writeByte("start", 0);
   }
