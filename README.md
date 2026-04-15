@@ -462,42 +462,78 @@ You can override any field before clicking **Run sweep**. Leave a field blank to
 #### How to access the PHEW web app (step by step)
 
 1. **Why not double-click `index.html`?**
-   [Web Bluetooth](https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API) requires a **secure context** — the browser must see **`https://`** or **`http://localhost`**. Opening the file directly as `file://` blocks Bluetooth access.
+   [Web Bluetooth](https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API) requires a **secure context** — the browser must see **`https://`** or **`http://localhost`** (or `127.0.0.1`). Opening the file directly as `file://` blocks Bluetooth access.
 
-2. **Start a local web server.** Open a terminal in the repo root and run:
+2. **Start a local web server (one instance only).** Open a terminal, go to the app folder, and serve it on a free port (default **8080**):
+
+   **macOS / Linux / Windows Command Prompt:**
 
    ```bash
    cd web/helpstat-app
    python -m http.server 8080
    ```
 
-   > **Windows (PowerShell):** Use the same command — Python's built-in server works on all platforms. If `python` is not recognized, try `python3` or install Python from [python.org](https://python.org).
+   **Windows PowerShell (built-in 5.x):** The `&&` chain operator is **not** available in older PowerShell. Use **two lines**, or a **semicolon**:
 
-3. **Open the app in Chrome or Edge** — go to: [http://localhost:8080](http://localhost:8080)
+   ```powershell
+   Set-Location web\helpstat-app
+   python -m http.server 8080
+   ```
 
-   You should see the **PHEW** header with Live / History / About tabs.
+   ```powershell
+   Set-Location web\helpstat-app; python -m http.server 8080
+   ```
 
-4. **Power on the board** (USB-C or battery). The firmware starts BLE advertising automatically (`BLE_setup()` runs in `setup()`).
+   (Run these from the **repository root**, or use the full path to `web\helpstat-app`. **PowerShell 7+** supports `&&` like bash.)
 
-5. **Connect:**
-   - Click the **Connect** button on the Live tab.
-   - A browser Bluetooth permission dialog appears — select **`HELPStat`** from the device list and click **Pair**.
-   - The status line updates to "Connected: HELPStat".
+   Keep this terminal **open** while you use the app. You should see a line such as `Serving HTTP on 0.0.0.0 port 8080`.
+
+   **Python:** If `python` is not found, try `py -m http.server 8080` (Windows launcher) or `python3`. Install Python 3.8+ from [python.org](https://python.org) if needed.
+
+   **Port already in use:** If 8080 is taken, pick another port (example **8765**):
+
+   ```bash
+   python -m http.server 8765
+   ```
+
+   Then open `http://localhost:8765` instead. **Do not** start multiple `http.server` processes on the **same** port — you can get failed loads or empty responses; close duplicate terminals or choose a new port.
+
+3. **Open the app in Chrome or Edge** — go to: [http://localhost:8080](http://localhost:8080) (or your chosen port).
+
+   You should see the **PHEW** header with **Live** / **History** / **About** tabs.
+
+4. **Prepare the hardware.** Power the board (**USB-C** or battery). Firmware must be running so **BLE advertises** as **`HELPStat`** (`BLE_setup()` in `setup()` — already in this repo’s `src/main.cpp`). For a **USB serial** session at the same time, use another tool (e.g. PlatformIO monitor) and avoid port conflicts; BLE and USB can often be used together depending on your setup.
+
+5. **Connect from the Live tab:**
+   - Click **Connect**.
+   - When the browser asks for Bluetooth permission, choose **`HELPStat`** and confirm pairing/connection.
+   - The status line should show that you are connected (e.g. connected to **HELPStat**).
 
 6. **Run a sweep:**
-   - (Optional) Expand **Sweep parameters** and adjust values, or leave defaults.
-   - Click **Run sweep**. A progress bar appears showing point count, current frequency, and elapsed time.
-   - To cancel mid-sweep, click the red **Stop** button (replaces "Run sweep" while running). The firmware aborts cleanly and partial data is discarded.
-   - Wait for the sweep to complete (~30 s for 10 Hz floor, ~108 s for 1 Hz floor at 5 pts/decade).
-   - When done, the app auto-saves the sweep and switches to the **History** tab showing Nyquist and Bode plots.
+   - (Optional) Expand **Sweep parameters** and edit fields, or leave defaults to match firmware `MEASURE:SAMPLE`-style behavior.
+   - Click **Run sweep**. A progress area shows point count, current frequency, and elapsed time.
+   - To **abort**, click **Stop** (replaces **Run sweep** while a run is active). The firmware stops cleanly; partial data are not treated as a completed sweep.
+   - Wait for completion. Approximate times depend on span and points/decade (e.g. **~108 s** for a full **200 kHz → 1 Hz** span at **5** pts/decade — see [Frequency range and sweep duration](#frequency-range-and-sweep-duration)).
+   - When the sweep finishes, the app **saves** the run and typically moves to **History** with plots.
 
-7. **Review and export:**
-   - Use the **Day** and **Sweep** dropdowns to browse past measurements.
-   - Click **Export JSON** to download the **entire day's** data as `phew_YYYY-MM-DD.json` (all sweeps in one file).
-   - Click **Export CSV** to download **only the sweep currently selected** in the Sweep dropdown as `phew_YYYY-MM-DD_sweepN.csv`. The file has a header row `Frequency(Hz),Real(Ohm),Imaginary(Ohm),Magnitude(Ohm),Phase(Degrees)` followed by one row per point, then a short footer with fitted **Rct** and **Rs** — aligned with the CSV-style output from the firmware over serial.
-   - Use the **Import** button to load JSON exported from another machine or session.
+7. **History — review, import, export:**
+   - **Day** and **Sweep** dropdowns: pick a calendar day (Pacific time) and a sweep within that day.
+   - Charts: **Nyquist**, **Bode magnitude**, **Bode phase**.
+   - **Export JSON:** downloads that **entire day** as `phew_YYYY-MM-DD.json` (all sweeps in one file). Good for backup or moving data to another PC.
+   - **Export CSV:** downloads **only the selected sweep** as `phew_YYYY-MM-DD_sweepN.csv` — columns match serial CSV style: `Frequency(Hz),Real(Ohm),Imaginary(Ohm),Magnitude(Ohm),Phase(Degrees)`, plus footer lines for **Rct** / **Rs** when available.
+   - **Import:** load a JSON file from another session or machine to view in History.
 
-8. **When finished,** press Ctrl+C in the terminal to stop the local server.
+8. **Stop the server** when done: in the terminal where `http.server` is running, press **Ctrl+C**.
+
+#### PHEW troubleshooting
+
+| Symptom | What to try |
+|--------|-------------|
+| Browser says Bluetooth is blocked or unavailable | Use **Chrome** or **Edge** on a supported OS; the page must be **`http://localhost/...`** or **HTTPS**, not `file://`. |
+| **Connect** never finds a device | Board powered? Firmware flashed? On Windows, Bluetooth **on**? Unpair old **HELPStat** entries in system Bluetooth settings if stuck. |
+| Page does not load / connection reset | Ensure **exactly one** HTTP server is bound to that port; try another port or close duplicate `python -m http.server` windows. |
+| PowerShell errors on `cd ... && python ...` | Use **semicolon** or **two lines** (see step 2), or upgrade to **PowerShell 7+**. |
+| iPhone / iPad | **Web Bluetooth is not supported** on iOS Safari. Use the **iOS** app (`ios/HELPStatCompanion/`) or import JSON from a desktop session. |
 
 #### Supported browsers and platforms
 
