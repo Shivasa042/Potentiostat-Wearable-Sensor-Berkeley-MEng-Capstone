@@ -422,6 +422,30 @@ async function main() {
     URL.revokeObjectURL(a.href);
   });
 
+  $("btn-export-csv").addEventListener("click", async () => {
+    const day = $("sel-day").value;
+    const idx = parseInt($("sel-sweep").value, 10);
+    if (!day || Number.isNaN(idx)) return;
+    const rec = await getDay(day);
+    const s = rec.sweeps?.[idx];
+    if (!s?.points?.length) return;
+
+    const header = "Frequency(Hz),Real(Ohm),Imaginary(Ohm),Magnitude(Ohm),Phase(Degrees)";
+    const rows = s.points.map((p) =>
+      `${p.f},${p.re},${p.im},${p.mag},${p.ph}`
+    );
+    const rctRs = `\nRct(Ohm),Rs(Ohm)\n${s.rct || ""},${s.rs || ""}`;
+    const csv = header + "\n" + rows.join("\n") + rctRs + "\n";
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    const sweepNum = idx + 1;
+    a.download = `phew_${day}_sweep${sweepNum}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
   $("file-import").addEventListener("change", async (ev) => {
     const file = ev.target.files?.[0];
     if (!file) return;
